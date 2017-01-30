@@ -1,0 +1,1473 @@
+
+#define SAVENC(X)	if(DEBUG)savenc(#X ".nc", (X))
+#define CHECKMAT(M, T) CV_Assert((M).type() == (T) && (M).isContinuous())
+//#define CHECKMAT(M) CV_Assert((M).isContinuous())
+
+
+
+void
+eprintf(const char *fmt, ...)
+{
+	va_list args;
+
+	fflush(stdout);
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+
+	if(fmt[0] != '\0' && fmt[strlen(fmt)-1] == ':'){
+		fprintf(stderr, " %s", strerror(errno));
+	}
+	fprintf(stderr, "\n");
+
+	exit(2);
+}
+
+// Print out error for NetCDF error number n and exit the program.
+void
+ncfatal(int n, const char *fmt, ...)
+{
+	va_list args;
+
+	fflush(stdout);
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+
+	fprintf(stderr, ": %s\n", nc_strerror(n));
+	exit(2);
+}
+
+char*
+fileprefix(const char *path)
+{
+	const char *b;
+	char *p, *s;
+	
+	b = strrchr(path, '/');
+	if(b == nullptr){
+		b = path;
+	}else{
+		b++;
+	}
+	p = strdup(b);
+	s = strrchr(p, '.');
+	if(s != nullptr){
+		*s = '\0';
+	}
+	return p;
+}
+
+const char*
+type2str(int type)
+{
+	switch(type){
+	default:       return "UnknownType";
+	case CV_8UC1:  return "CV_8UC1";
+	case CV_8SC1:  return "CV_8SC1";
+	case CV_16UC1: return "CV_16UC1";
+	case CV_16SC1: return "CV_16SC1";
+	case CV_32SC1: return "CV_32SC1";
+	case CV_32FC1: return "CV_32FC1";
+	case CV_64FC1: return "CV_64FC1";
+	}
+}
+
+void
+savenc(const char *path, const Mat &mat, bool compress=false)
+{
+	int i, n, ncid, dims, varid, xtype;
+	int dimids[MAXDIMS] = {};
+	char *name;
+	const char *dimnames[MAXDIMS] = {
+		"dim0",
+		"dim1",
+		"dim2",
+		"dim3",
+		"dim4",
+	};
+	
+	dims = mat.dims;
+	if(mat.channels() > 1){
+		dims++;
+	}
+	if(dims > MAXDIMS){
+		eprintf("savenc: too many dimensions %d\n", dims);
+	}
+	
+	n = nc_create(path, NC_NETCDF4, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: creating %s failed", path);
+	}
+	for(i = 0; i < mat.dims; i++){
+		n = nc_def_dim(ncid, dimnames[i], mat.size[i], &dimids[i]);
+		if(n != NC_NOERR){
+			ncfatal(n, "savenc: creating dim %d failed", i);
+		}
+	}
+	if(mat.channels() > 1){
+		n = nc_def_dim(ncid, dimnames[i], mat.channels(), &dimids[i]);
+		if(n != NC_NOERR){
+			ncfatal(n, "savenc: creating dim %d failed", i);
+		}
+	}
+	
+	xtype = -1;
+	switch(mat.depth()){
+	default:
+		eprintf("savenc: unsupported type %s\n", type2str(mat.type()));
+		break;
+	case CV_8U:	xtype = NC_UBYTE; break;
+	case CV_8S:	xtype = NC_BYTE; break;
+	case CV_16U:	xtype = NC_USHORT; break;
+	case CV_16S:	xtype = NC_SHORT; break;
+	case CV_32S:	xtype = NC_INT; break;
+	case CV_32F:	xtype = NC_FLOAT; break;
+	case CV_64F:	xtype = NC_DOUBLE; break;
+	}
+	
+	n = nc_def_var(ncid, "data", xtype, dims, dimids, &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: creating variable failed");
+	}
+	if(compress){	// enable compression?
+		n = nc_def_var_deflate(ncid, varid, 0, 1, 1);
+		if(n != NC_NOERR){
+			ncfatal(n, "savenc: setting deflate parameters failed");
+		}
+	}
+
+	n = nc_put_var(ncid, varid, mat.data);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: writing variable failed");
+	}
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: closing %s failed", path);
+	}
+
+	name = fileprefix(path);
+	printf("%s = loadnc(\"%s\")\n", name, path);
+	free(name);
+}
+
+int
+readvar(int ncid, const char *name, Mat &img)
+{
+	int i, varid, n, ndims, dimids[MAXDIMS], ishape[MAXDIMS], cvt;
+	size_t shape[MAXDIMS] = {};
+	nc_type nct;
+	
+	n = nc_inq_varid(ncid, name, &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_inq_varid failed for variable %s", name);
+	}
+	n = nc_inq_var(ncid, varid, nullptr, &nct, &ndims, dimids, nullptr);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_inq_var failed for variable %s", name);
+	}
+	if(ndims > MAXDIMS){
+		eprintf("number of dimensions %d > MAXDIMS=%d\n", ndims, MAXDIMS);
+	}
+	
+	for(i = 0; i < ndims; i++){
+		n = nc_inq_dimlen(ncid, dimids[i], &shape[i]);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_inq_dimlen failed for dim %d", dimids[i]);
+		}
+	}
+	
+	cvt = -1;
+	switch(nct){
+	default:
+		eprintf("unknown netcdf data type");
+		break;
+	case NC_BYTE:	cvt = CV_8SC1; break;
+	case NC_UBYTE:	cvt = CV_8UC1; break;
+	case NC_SHORT:	cvt = CV_16SC1; break;
+	case NC_USHORT:	cvt = CV_16UC1; break;
+	case NC_INT:	cvt = CV_32SC1; break;
+	case NC_FLOAT:	cvt = CV_32FC1; break;
+	case NC_DOUBLE:	cvt = CV_64FC1; break;
+	}
+	
+	for(i = 0; i < MAXDIMS; i++){
+		ishape[i] = shape[i];
+	}
+	img = Mat(ndims, ishape, cvt);
+	n = nc_get_var(ncid, varid, img.data);
+	if(n != NC_NOERR){
+		ncfatal(n, "readvar: nc_get_var '%s' failed", name);
+	}
+	return varid;
+}
+
+void
+get_file_names(const char *pathsfile, vector<string> &paths)
+{
+	std::ifstream f(pathsfile);
+	std::string line; 
+	while (std::getline(f, line)){
+		paths.push_back(line);
+
+	}
+	f.close();
+
+	if(paths.size() < TIMEINT){
+		eprintf("too few granules\n");
+	}
+	
+}
+
+int
+get_current_files(const vector<string> &paths, vector<string> &curPaths, int nfiles, int loc=0)
+{
+	curPaths.clear();
+	for(int i=0;i<nfiles;i++){
+		curPaths.push_back(paths[loc+i]);
+	}
+	return loc + 1;
+}
+
+void
+get_icemask(const string pathsfile, Mat1b &ice_mask, int ind)
+{
+	int ncid,y,x;
+	int n = nc_open(pathsfile.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+	}
+
+	Mat1s img;
+	int varid = readvar(ncid, "l2p_flags", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+    
+	for(y = 0; y < HEIGHT; y++){
+		for(x = 0; x < WIDTH; x++){
+			ice_mask(y,x,ind) =0;
+			 if(img(0,y,x) & 4){
+			 	ice_mask(y, x, ind) = 255;
+			 }
+		}
+	}
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+}
+
+void
+open_LUT(const string pathsfile, Mat1b &lut, int *dims)
+{
+	int ncid, i,j,k,l;
+	int n = nc_open(pathsfile.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+	}
+
+	Mat1b img;
+	int varid = readvar(ncid, "LUT", img);
+	if(img.dims != 4 || img.size[0] != dims[0] || img.size[1] != dims[1] || img.size[2] != dims[2] || img.size[3] != dims[3]){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_8UC1){
+		eprintf("unpexpected type\n");
+	}
+    
+    int d[4] = {0,0,0,0};
+	for(i = 0; i < dims[0]; i++){
+		d[0] = i;
+		for(j = 0; j < dims[1]; j++){
+			d[1] =j;
+			for(k = 0; k < dims[2]; k++){
+				d[2] = k;
+				for(l = 0; l < dims[3]; l++){	
+					d[3] =l;
+					lut(d) = img(d);
+				}
+			}		 
+		}
+	}
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+}
+
+void
+read_mask(const string pathsfile, Mat1b &mask, int cur_ind)
+{
+	int ncid, y,x;
+	int n = nc_open(pathsfile.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+	}
+
+	Mat1b img;
+	int varid = readvar(ncid, "brightness_temperature_11um2", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != WIDTH){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_8UC1){
+		eprintf("unpexpected type\n");
+	}
+   
+    if(cur_ind < 0){
+		for(y = 0; y < HEIGHT; y++){		
+			for(x = 0; x < WIDTH; x++){
+			
+					//printf("val of img = %d", img(0,y,x));	
+
+				mask(y,x) = img(0,y,x);
+			}
+		}
+	}
+	else{
+		for(y = 0; y < HEIGHT; y++){		
+			for(x = 0; x < WIDTH; x++){
+			
+					//printf("val of img = %d", img(0,y,x));	
+
+				mask(y,x,cur_ind) = img(0,y,x);
+			}
+		}
+	}		 
+
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+}
+
+void
+get_l2pmask(const char *pathsfile, Mat1b &land_mask, Mat1b &invalid_mask)
+{
+    int ncid;
+	int n = nc_open(pathsfile, 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+	}
+
+	Mat1s img;
+	int varid = readvar(ncid, "l2p_flags", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+    
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 if(img(0,y,x) & 2){
+			 	land_mask(y, x) = 255;
+			 }
+			 else{
+			 	land_mask(y,x) = 0;
+			 }
+		}
+	}
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 if(img(0,y,x) & 256){
+			 	invalid_mask(y, x) = 255;
+			 }
+			 else{
+			 	invalid_mask(y,x) = 0;
+			 }
+		}
+	}
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+}
+
+
+void
+readgranule_oneband(const string path,Mat1f &bt11, int ind,string variable)
+{
+	// TODO: deal with non-continuous time interval
+
+	//printf("%s\n", paths[i].c_str());
+	float val;
+	int ncid;
+	int n = nc_open(path.c_str(), 0, &ncid);
+	float scale,offset;
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s", path.c_str());
+	}
+		
+	Mat img;
+
+	int varid = readvar(ncid, variable.c_str(), img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT|| img.size[2] != WIDTH){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_32FC1 && img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+    if(img.type() == CV_32FC1){
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<float>(0,y, x);
+				 bt11(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt11(y, x, ind) = val;
+				 }
+			}
+		}
+	}
+	else{
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed add_offset");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed scale");
+		}
+
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 float val = img.at<short>(0,y, x)*scale + offset;
+				 bt11(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt11(y, x, ind) = val;
+				 }
+			}
+		}
+	}
+
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+}
+
+void
+get_var(const string path, Mat1f &mat, const string variable)
+{
+	// TODO: deal with non-continuous time interval
+    
+	//printf("%s\n", paths[i].c_str());
+	int ncid;
+	float val;
+	float offset, scale;
+	int n = nc_open(path.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s", path.c_str());
+	}
+	
+	Mat img;
+
+	int varid = readvar(ncid, variable.c_str(), img);
+	if(img.dims != 2 && img.dims != 3){
+		if(img.dims ==2 && (img.size[0] != HEIGHT|| img.size[1] != WIDTH)){
+			printf("unpexpected dimensions\n");
+		}
+		if(img.dims ==3 && (img.size[0] != 1 || img.size[1] != HEIGHT|| img.size[2] != WIDTH)){
+			printf("unpexpected dimensions\n");
+		}
+	}
+	if(img.type() != CV_32FC1 && img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	if(img.type() == CV_16SC1){
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 if(img.dims == 3){
+				 	val = img.at<short>(0, y, x)*scale + offset;
+				 }
+				 else{
+				 	val = img.at<short>(y, x)*scale + offset;
+				 }
+				 mat(y,x) = NAN;
+				 if(val > 0){
+				 	mat(y, x) = val;
+				 }
+			}
+		}
+	}
+
+	else{
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 if(img.dims == 3){
+				 	val = img.at<float>(0, y, x);
+				 }
+				 else{
+				 	val = img.at<float>(y, x);
+				 }
+				 mat(y,x) = NAN;
+				 if(val > 0){
+				 	mat(y, x) = val;
+				 }
+			}
+		}
+	}
+
+	
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+
+}
+
+void
+save_test_nc_float(const Mat samples, const char *filename){
+	char* width_name = "nj";
+	char* height_name = "ni";
+    std::vector<int> dimid(3);
+    
+    int ncid;
+	int n = nc_create(filename,NC_NETCDF4,&ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_create failed");
+	}
+
+	n = nc_def_dim(ncid, "time", 1, &dimid[0]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+
+	n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+
+	n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+    
+    int varid;
+    if(samples.type()== CV_32FC1){
+	    n = nc_def_var(ncid, "brightness_temperature_11um2", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_var failed");
+		}
+
+	
+		n = nc_put_var_float(ncid, varid, (float*)samples.data);
+		if(n != NC_NOERR)
+			ncfatal(n, "nc_put_var_float failed");
+	}
+
+	else if(samples.type() == CV_8UC1){
+	    n = nc_def_var(ncid, "brightness_temperature_11um2", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_var failed");
+		}
+
+		n = nc_put_var_uchar(ncid, varid, (uchar*)samples.data);
+		if(n != NC_NOERR)
+			ncfatal(n, "nc_put_var_float failed");
+	}
+
+	else{
+		eprintf("Cannot save this data type\n");
+	}
+
+    n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: closing %s failed", filename);
+	}
+}
+
+void
+save_test_nc_final(const Mat1f &bt11_samples, const Mat1f &bt12_samples, const Mat1f &bt08_samples, const Mat1f &bt10_samples,const Mat1f sst_samples, 
+				   const Mat1b &bt08_clear_count,const Mat1b &bt08_approx_count,const Mat1b &bt10_clear_count,const Mat1b &bt10_approx_count,
+				   const Mat1b &bt11_clear_count,const Mat1b &bt11_approx_count,const Mat1b &bt12_clear_count,const Mat1b &bt12_approx_count,
+				   const Mat1b &sst_clear_count,const Mat1b &sst_approx_count,const char* filename)
+{
+	char* width_name = "ni";
+	char* height_name = "nj";
+    std::vector<int> dimid(3);
+    
+    int ncid;
+	int n = nc_create(filename,NC_NETCDF4,&ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_create failed");
+	}
+
+	n = nc_def_dim(ncid, "time", 1, &dimid[0]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+
+	n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+
+	n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+    
+    int varid;
+    n = nc_def_var(ncid, "brightness_temperature_10um4", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt10_samples.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_def_var(ncid, "brightness_temperature_08um6", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt08_samples.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_def_var(ncid, "brightness_temperature_11um2", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt11_samples.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+	
+	n = nc_def_var(ncid, "brightness_temperature_12um3", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt12_samples.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_put_var_float(ncid, varid, (float*)bt11_samples.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+	
+	n = nc_def_var(ncid, "sea_surface_temperature", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)sst_samples.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_def_var(ncid, "num_clear_bt08", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt08_clear_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_int bt08 failed");
+
+	n = nc_def_var(ncid, "num_clear_bt10", NC_BYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt10_clear_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_int bt10 failed");
+
+	n = nc_def_var(ncid, "num_clear_bt11", NC_BYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt11_clear_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_int bt11 failed");
+
+	n = nc_def_var(ncid, "num_clear_bt12", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt12_clear_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_int bt12 failed");
+
+	n = nc_def_var(ncid, "num_clear_sst", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)sst_clear_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_int failed");
+
+	n = nc_def_var(ncid, "num_approx_bt08", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt08_approx_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_fint failed");
+
+	n = nc_def_var(ncid, "num_approx_bt10", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt10_approx_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_fint bt10 failed");
+
+
+	n = nc_def_var(ncid, "num_approx_bt11", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt11_approx_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_fint bt11 failed");
+
+	n = nc_def_var(ncid, "num_approx_bt12", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)bt12_approx_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_uchar bt12 failed");
+
+	n = nc_def_var(ncid, "num_approx_sst", NC_UBYTE, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_uchar(ncid, varid, (uchar*)sst_approx_count.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_uchar failed");
+
+    n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: closing %s failed", filename);
+	}
+}
+
+void
+readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt10, Mat1f &dt_analysis, int ind)
+{
+	// TODO: deal with non-continuous time interval 
+	int ncid;
+	float val;
+
+	int n = nc_open(path.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s", path.c_str());
+	}
+	
+	Mat img;
+
+	int varid = readvar(ncid, "brightness_temperature_11um2", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	float scale, offset;
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 bt11(y,x,ind) = NAN;
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 if(val > 0){
+			 	bt11(y, x,ind) = val;
+			 }
+		}
+	}
+	
+	varid = readvar(ncid, "brightness_temperature_12um3", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt12(y,x,ind) = NAN;
+			 if(val > 0){
+			 	bt12(y, x,ind) = val;
+			 }
+		}
+	}
+
+	varid = readvar(ncid, "brightness_temperature_08um6", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt08(y,x,ind) = NAN;
+			 if(val > 0){
+			 	bt08(y, x,ind) = val;
+			 }
+		}
+	}
+	
+	varid = readvar(ncid, "brightness_temperature_10um4", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt10(y,x,ind) = NAN;
+			 if(val > 0){
+			 	bt10(y, x,ind) = val;
+			 }
+		}
+	}
+
+	varid = readvar(ncid, "dt_analysis", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_8SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<char>(0, y, x)*scale;
+			 dt_analysis(y,x,ind) = NAN;
+			 if(!std::isnan(val)){
+			 	dt_analysis(y, x,ind) = val;
+			 }
+		}
+	}
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+
+}
+
+void
+readgranule_temps(const string path, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08,int ind)
+{
+	// TODO: deal with non-continuous time interval 
+	int ncid;
+	float val;
+	int n = nc_open(path.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s", path.c_str());
+	}
+	
+	Mat img;
+
+	int varid = readvar(ncid, "brightness_temperature_11um2", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	float scale, offset;
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 bt11(y,x,ind) = NAN;
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 if(val > 0){
+			 	bt11(y, x,ind) = val;
+			 }
+		}
+	}
+	
+	varid = readvar(ncid, "brightness_temperature_12um3", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt12(y,x,ind) = NAN;
+			 if(val > 0){
+			 	bt12(y, x,ind) = val;
+			 }
+		}
+	}
+
+	varid = readvar(ncid, "brightness_temperature_08um6", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt08(y,x,ind) = NAN;
+			 if(val > 0){
+			 	bt08(y, x,ind) = val;
+			 }
+		}
+	}
+
+	varid = readvar(ncid, "brightness_temperature_10um4", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_get_att_float failed");
+	}
+	
+
+	for(int y = 0; y < HEIGHT; y++){
+		for(int x = 0; x < WIDTH; x++){
+			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt10(y,x,ind) = NAN;
+			 if(val > 0){
+			 	bt10(y, x, ind) = val;
+			 }
+		}
+	}
+
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+
+}
+
+void
+readgranule_fullbands(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt10, Mat1f &sst, int ind)
+{
+	// TODO: deal with non-continuous time interval 
+	
+	int ncid;
+	float val;
+    float scale, offset;
+
+	int n = nc_open(path.c_str(), 0, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s", path.c_str());
+	}
+	
+	Mat img;
+	
+	int varid = readvar(ncid, "brightness_temperature_11um2", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1 && img.type() != CV_32FC1){
+		eprintf("unpexpected type\n");
+	}
+
+	if(img.type() == CV_16SC1){
+		
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+	
+	
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 bt11(y,x,ind) = NAN;
+				 val = img.at<short>(0, y, x)*scale + offset;
+				 if(val > 0){
+				 	bt11(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	else{
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 bt11(y,x,ind) = NAN;
+				 val = img.at<float>(0, y, x);
+				 if(val > 0){
+				 	bt11(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+		
+	varid = readvar(ncid, "brightness_temperature_12um3", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1 && img.type() != CV_32FC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	if(img.type() == CV_16SC1){
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		
+
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<short>(0, y, x)*scale + offset;
+				 bt12(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt12(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	else{
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<float>(0, y, x);
+				 bt12(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt12(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	varid = readvar(ncid, "brightness_temperature_08um6", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1 && img.type() != CV_32FC1){
+		eprintf("unpexpected type\n");
+	}
+	
+	if(img.type() == CV_16SC1){
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		
+
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<short>(0, y, x)*scale + offset;
+				 bt08(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt08(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	else{
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<float>(0, y, x);
+				 bt08(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt08(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+	
+	varid = readvar(ncid, "brightness_temperature_10um4", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1 && img.type() != CV_32FC1){
+		eprintf("unpexpected type\n");
+	}
+	if(img.type() == CV_16SC1){
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		
+
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<short>(0, y, x)*scale + offset;
+				 bt10(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt10(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	else{
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<float>(0, y, x);
+				 bt10(y,x,ind) = NAN;
+				 if(val > 0){
+				 	bt10(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	varid = readvar(ncid, "sea_surface_temperature", img);
+	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
+		printf("unpexpected dimensions\n");
+	}
+	if(img.type() != CV_16SC1 && img.type() != CV_32FC1){
+		eprintf("unpexpected type\n");
+	}
+	if(img.type() == CV_16SC1){
+		n = nc_get_att_float(ncid, varid, "add_offset", &offset);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_get_att_float failed");
+		}
+		
+
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<short>(0, y, x)*scale + offset;
+				 sst(y,x,ind) = NAN;
+				 if(val > 0){
+				 	sst(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	else{
+		for(int y = 0; y < HEIGHT; y++){
+			for(int x = 0; x < WIDTH; x++){
+				 val = img.at<float>(0, y, x);
+				 sst(y,x,ind) = NAN;
+				 if(val > 0){
+				 	sst(y, x,ind) = val;
+				 }
+			}
+		}
+	}
+
+	n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_close failed");
+	}
+
+}
+
+void
+save_test_nc_fullbands(const Mat1f &bt08,const Mat1f & bt10,const Mat1f & bt11, const Mat1f &bt12,
+	                   const Mat1f &sst,const char* filename)
+{
+	char* width_name = "ni";
+	char* height_name = "nj";
+    std::vector<int> dimid(3);
+    
+    int ncid;
+	int n = nc_create(filename,NC_NETCDF4,&ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_create failed");
+	}
+
+	n = nc_def_dim(ncid, "time", 1, &dimid[0]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+
+	n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+
+	n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_dim failed");
+	}
+    
+    int varid;
+    n = nc_def_var(ncid, "brightness_temperature_10um4", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt10.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_def_var(ncid, "brightness_temperature_08um6", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt08.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_def_var(ncid, "brightness_temperature_11um2", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt11.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+	
+	n = nc_def_var(ncid, "brightness_temperature_12um3", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)bt12.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+	n = nc_def_var(ncid, "sea_surface_temperature", NC_FLOAT, dimid.size(), dimid.data(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_def_var failed");
+	}
+
+	n = nc_put_var_float(ncid, varid, (float*)sst.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+    n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: closing %s failed", filename);
+	}
+}
+
+void
+save_approx(const string filename, Mat1f &approx,string variable, bool mode)
+{
+	//mode true- create file
+	//mode false - append to file
+	char* width_name = "nj";
+	char* height_name = "ni";
+    std::vector<int> dimid(3);
+    
+    int ncid,n, varid;
+    if(mode==true){
+		n = nc_create(filename.c_str(),NC_NETCDF4,&ncid);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_create failed");
+		}
+
+		n = nc_def_dim(ncid, "time", 1, &dimid[0]);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_dim failed");
+		}
+
+		n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_dim failed");
+		}
+
+		n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_dim failed");
+		}
+	    
+	    varid;
+
+	    n = nc_def_var(ncid, variable.c_str(), NC_FLOAT, dimid.size(), dimid.data(), &varid);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_var failed");
+		}
+
+		n = nc_put_var_float(ncid, varid, (float*)approx.data);
+		if(n != NC_NOERR)
+			ncfatal(n, "nc_put_var_float failed");
+
+	    n = nc_close(ncid);
+		if(n != NC_NOERR){
+			ncfatal(n, "savenc: closing %s failed", filename);
+		}
+	}
+	else{
+		n = nc_open(filename.c_str(), NC_WRITE, &ncid);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_open failed for %s", filename.c_str());
+		}
+
+		dimid[0] = 0; dimid[1] = 1; dimid[2] = 2;
+	    n = nc_def_var(ncid, variable.c_str(), NC_FLOAT, dimid.size(), dimid.data() , &varid);
+		if(n != NC_NOERR){
+			ncfatal(n, "nc_def_var failed");
+		}
+
+		n = nc_put_var_float(ncid, varid, (float*)approx.data);
+		if(n != NC_NOERR)
+			ncfatal(n, "nc_put_var_float failed");
+
+	    n = nc_close(ncid);
+		if(n != NC_NOERR){
+			ncfatal(n, "savenc: closing %s failed", filename);
+		}
+	}
+
+
+}
+
+void
+update_variable(const string filename, Mat1f &data,string variable)
+{
+	int n, varid, ncid;
+
+	n = nc_open(filename.c_str(), NC_WRITE, &ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_open failed for %s", filename.c_str());
+	}
+
+	n = nc_inq_varid(ncid, variable.c_str(), &varid);
+	if(n != NC_NOERR){
+		ncfatal(n, "nc_inq_varid failed for variable %s", variable);
+	}
+	
+	n = nc_put_var_float(ncid, varid, (float*)data.data);
+	if(n != NC_NOERR)
+		ncfatal(n, "nc_put_var_float failed");
+
+    n = nc_close(ncid);
+	if(n != NC_NOERR){
+		ncfatal(n, "savenc: closing %s failed", filename.c_str());
+	}
+
+}
