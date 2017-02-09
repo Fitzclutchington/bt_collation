@@ -56,8 +56,8 @@ void
 calc_subsample_3d(const Mat1f &approx_samples, const Mat1f &approx_interp, const Mat1f &clear_samples, const Mat1f &samples, const Mat1b &land_mask, 
 				  const Mat1b &invalid_mask, Mat1f &final_sample, Mat1b &clear, Mat1b &approx, int time_size, int ind, int mid)
 {	
-	float sum, collated_val, max_val, approx_val;
-	int count_clear,count_approx,count_smooth;
+	float sum, collated_val, max_val;
+	int count_clear,count_approx;
 	int y,x,t,i,j;
 	int w = 1;
     
@@ -141,7 +141,6 @@ subsample(const vector<string> &approx_paths, const vector<string> &original_pat
 	int i,j;
 	int time_size = 7;
 	int file_count = 3;
-	int num_approx = approx_paths.size();
 	int mid = time_size/2;
 	int dims[3] = {HEIGHT,WIDTH,time_size};
 	int approx_dims[3] = {HEIGHT,WIDTH,approx_paths.size()};

@@ -434,12 +434,11 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
   int t_delta = 2;
 
   int min_num = (2*y_delta +1) *(2*x_delta + 1)*(2*t_delta+1)/2;
-  float bt08_sum,bt10_sum,bt11_sum,bt12_sum,count,mean,window_sum,row_sum, res_mean;
+  float bt08_sum,bt10_sum,bt11_sum,bt12_sum,count,window_sum,row_sum, res_mean;
   float temp_bt08;
   float temp_bt10;
   float temp_bt11;
   float temp_bt12;
-  float clear_sample;
 
   float bt08_mean;
   float bt10_mean;
@@ -482,7 +481,6 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
               temp_bt10 = bt10(y+i,x+j,t);
               temp_bt11 = bt11(y+i,x+j,t);
               temp_bt12 = bt12(y+i,x+j,t);
-              clear_sample = clear_samples(y+i,x+j,t);
               if(!std::isnan(temp_bt08) && !std::isnan(temp_bt10) && !std::isnan(temp_bt11) && !std::isnan(temp_bt12)){
                 valid_bt08.push_back(temp_bt08);
                 valid_bt10.push_back(temp_bt10);

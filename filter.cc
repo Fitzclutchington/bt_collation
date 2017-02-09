@@ -77,9 +77,7 @@ filter_clouds(const vector<string> &paths, const Mat1b &land_mask, const Mat1b &
     int new_mask_ind = FILTER_TIME_SIZE -1;
     int current_mid = new_mask_ind/2;
     int file_count = 1;
-    int x,y,t;
     int dims[3] = {HEIGHT,WIDTH,FILTER_TIME_SIZE};
-    int inds[FILTER_TIME_SIZE];
     // Cur controls where the mask is read from
 
     string filename;

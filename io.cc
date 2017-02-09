@@ -239,7 +239,6 @@ get_icemask(const string pathsfile, Mat1b &ice_mask, int ind)
 	}
 
 	Mat1s img;
-	int varid = readvar(ncid, "l2p_flags", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
 		printf("unpexpected dimensions\n");
 	}
@@ -271,7 +270,6 @@ open_LUT(const string pathsfile, Mat1b &lut, int *dims)
 	}
 
 	Mat1b img;
-	int varid = readvar(ncid, "LUT", img);
 	if(img.dims != 4 || img.size[0] != dims[0] || img.size[1] != dims[1] || img.size[2] != dims[2] || img.size[3] != dims[3]){
 		printf("unpexpected dimensions\n");
 	}
@@ -309,7 +307,6 @@ read_mask(const string pathsfile, Mat1b &mask, int cur_ind)
 	}
 
 	Mat1b img;
-	int varid = readvar(ncid, "brightness_temperature_11um2", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != WIDTH){
 		printf("unpexpected dimensions\n");
 	}
@@ -354,7 +351,6 @@ get_l2pmask(const char *pathsfile, Mat1b &land_mask, Mat1b &invalid_mask)
 	}
 
 	Mat1s img;
-	int varid = readvar(ncid, "l2p_flags", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
 		printf("unpexpected dimensions\n");
 	}
@@ -1405,7 +1401,6 @@ save_approx(const string filename, Mat1f &approx,string variable, bool mode)
 			ncfatal(n, "nc_def_dim failed");
 		}
 	    
-	    varid;
 
 	    n = nc_def_var(ncid, variable.c_str(), NC_FLOAT, dimid.size(), dimid.data(), &varid);
 		if(n != NC_NOERR){
