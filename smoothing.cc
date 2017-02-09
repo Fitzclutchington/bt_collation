@@ -3,16 +3,12 @@ void
 smoothing3D(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const Mat1f &bt12, const Mat1f &sst, const Mat1b &land_mask, const Mat1b &invalid_mask, 
 	const Mat1b &ice_masks, Mat1f &bt08_3dsmooth, Mat1f &bt10_3dsmooth, Mat1f &bt11_3dsmooth, Mat1f &bt12_3dsmooth, Mat1f &sst_3dsmooth, int *inds)
 {
-	int x,y,t,i,j,k;
 	int t_lag = 9;
 	int w = 10;
 
 	int window[3] = {w,w,t_lag};
 
-	int t_len = 2*t_lag+1;
-	int w_len = 2*w+1;
 	int threshold;
-	double left_sum, sum,  val, avg,  count, left_count;
 
 	Mat1f time_sum(HEIGHT,WIDTH);
 	Mat1f time_count(HEIGHT,WIDTH);
@@ -20,7 +16,6 @@ smoothing3D(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const Mat1f
 	threshold = PR_CLEAR * (2*t_lag+1)*(2*w+1)*(2*w+1);
 	//threshold =1;
 	//printf("%d \n",threshold);
-	t = t_lag;
 	printf("starting loop\n");
 
 	windowed_nanmean_3d(bt08, land_mask, invalid_mask, ice_masks, bt08_3dsmooth, window, inds, threshold);

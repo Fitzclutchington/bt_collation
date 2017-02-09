@@ -2,7 +2,7 @@ void
 calc_approximate(const Mat1f &bt11_smooth, const Mat1f &bt11_clear, const Mat1b &land_mask, const Mat1b &invalid_mask, 
                  Mat1f &bt11_approx, int * dims)
 {
-	int x,y,z,i;
+	int x,y,z;
 	double d1,d2,coeff;
 	//placeholder
 	int time = dims[2];
@@ -100,7 +100,6 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     int y,x;
     int time_size = smooth_paths.size();
     //int time_size = 10;
-    int original_lag = FILTER_WINDOW_LAG+SECOND_PASS_LAG+SMOOTH_WINDOW_LAG;
 
     int i,j;
     int file_count =0;

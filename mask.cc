@@ -197,20 +197,18 @@ filter_histogram(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const 
 {
     int x,y;
     int r1_L = -3;   int r1_R = 7;
-    int r2_L =  1;   int r2_R = 9;
     int r3_L = 1;    int r3_R = 6;
     int t_L  = 265;  int t_R  = 301;
 
-    float t, l, r1, r2,  r3;
+    float t, l, r1, r3;
     float delta_r = 0.1;
     float delta = 0.5;
     float delta_l = 5;
 
     float dt_L = t_L/delta; float dt_R = t_R/delta;
     float dr1_L = r1_L/delta_r; float dr1_R = r1_R/delta_r;
-    float dr2_L = r2_L/delta_r; float dr2_R = r2_R/delta_r;
     float dr3_L = r3_L/delta_r; float dr3_R = r3_R/delta_r;
-    float dlat_L =0; float dlat_R = 90/delta_l;
+    float dlat_L =0; 
 
     //int dims[4] = {67, 101, 81, 51};
     int dims[4] = {73 , 19 , 101 , 51};
@@ -230,7 +228,6 @@ filter_histogram(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const 
                 //printf("passed first if statement\n");
                 l = round(fabs(lats(y,x))/delta_l);
                 r1=round((bt08(y,x,cur_ind)-bt12(y,x,cur_ind))/delta_r);
-                r2=round((bt10(y,x,cur_ind)-bt12(y,x,cur_ind))/delta_r);
                 r3=round((bt11(y,x,cur_ind)-bt12(y,x,cur_ind))/delta_r);
 
                 
