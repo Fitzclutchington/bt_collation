@@ -1,4 +1,6 @@
 data/
+bt_collation/
+*.zip
 *.pyc
 *.swp
 *.nc

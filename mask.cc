@@ -1,11 +1,18 @@
 void
-apply_l2p_flags(const Mat1b &ice_mask,const Mat1b &land_mask,const Mat1b &invalid_mask,Mat1f &bt11_clear, int ind)
+apply_l2p_flags(const Mat1b &ice_mask,const Mat1b &land_mask,const Mat1b &invalid_mask,Mat1f &bt11_clear, int ind, bool slice)
 {
     int x,y;
     for(y=0;y<HEIGHT;y++){
         for(x=0;x<WIDTH;x++){
-            if(ice_mask(y,x,ind)==255 || land_mask(y,x)==255 || invalid_mask(y,x)==255){
-                bt11_clear(y,x) = NAN;
+            if(slice){
+                if(ice_mask(y,x,ind)==255 || land_mask(y,x)==255 || invalid_mask(y,x)==255){
+                    bt11_clear(y,x) = NAN;
+                }
+            }
+            else{
+                if(ice_mask(y,x,ind)==255 || land_mask(y,x)==255 || invalid_mask(y,x)==255){
+                    bt11_clear(y,x,ind) = NAN;
+                }
             }
         }
     }
@@ -20,15 +27,15 @@ void
 compute_diagmask(const Mat1f &samples, Mat1f &clear_samples, int cur_ind)
 {
     int x,y,i, ind;
-    int w = FILTER_WINDOW_LAG;
+    int w = DIAG_LAG;
     float DD,prod;
     Mat1b diag_mask(HEIGHT,WIDTH);
     diag_mask.setTo(0);
     //Mat1f DD_test(3,dims);
-    Mat1f window(1,FILTER_TIME_SIZE);
-    Mat1f u = Mat1f::ones(1,FILTER_TIME_SIZE);
+    Mat1f window(1,DIAG_SIZE);
+    Mat1f u = Mat1f::ones(1,DIAG_SIZE);
     Mat1f powers;
-    Mat1f D(1,FILTER_TIME_SIZE);
+    Mat1f D(1,DIAG_SIZE);
     u = u/sqrt(sum(u).val[0]);
     //printf("starting diag loop\n");
     for(y=0;y<HEIGHT;y++){
@@ -37,13 +44,13 @@ compute_diagmask(const Mat1f &samples, Mat1f &clear_samples, int cur_ind)
     
                 prod = 0;
                 DD=0;
-                for(i=0;i<FILTER_TIME_SIZE;i++){
+                for(i=0;i<DIAG_SIZE;i++){
                     ind = ((cur_ind-w+i % FILTER_TIME_SIZE) + FILTER_TIME_SIZE) % FILTER_TIME_SIZE;
                     window(i) = samples(y,x,ind);
                     prod+=(window(i)*u(i));
                 }
                 
-                for(i=0;i<FILTER_TIME_SIZE;i++){
+                for(i=0;i<DIAG_SIZE;i++){
                     D(i) = window(i) - prod*u(i);
                     D(i) = D(i)*D(i);
                     DD+=D(i);
@@ -60,6 +67,20 @@ compute_diagmask(const Mat1f &samples, Mat1f &clear_samples, int cur_ind)
     //SAVENC(diag_mask);
 }
 
+void
+compute_avgmask(const Mat1f &bt11, Mat1f &clear_samples)
+{
+    int y,x,t;
+    for(y=0;y<HEIGHT;y++){
+        for(x=0;x<WIDTH;x++){
+            if(!std::isnan(clear_samples(y,x))){
+                for(t=0;t<FILTER_TIME_SIZE;t++){
+                    
+                }
+            }
+        }
+    }
+}
 
 /*
 
@@ -333,6 +354,24 @@ apply_mask_2d(const Mat1b &mask, Mat1f &samples)
             if(mask(y,x) == 0){
                 samples(y,x) = NAN;
             }
+        }
+    }
+}
+
+void
+compute_dtmask(const Mat1f &reference,const Mat1f &samples,Mat1f &samples_clear,int cur_ind,float threshold)
+{
+    int x,y;
+    float DD;    
+    //printf("success at time %d",t);
+    for(y=0;y<HEIGHT;y++){
+        for(x=0;x<WIDTH;x++){   
+
+            DD = samples(y,x,cur_ind) - reference(y,x);    
+       
+            if(DD < threshold){
+                samples_clear(y,x) = NAN;
+            }            
         }
     }
 }

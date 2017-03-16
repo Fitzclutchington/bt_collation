@@ -13,13 +13,17 @@ LDFLAGS =\
 	
 OFILES = \
 	main.o\
+	hermite.o\
+
+HFILES = \
+	hermite.h
 
 LOC =\
 	eigen-eigen-26667be4f70b\
 
 all: $(PROG)
 
-%.o: %.cc
+%.o: %.cc $(HFILES)
 	$(CXX) -I $(LOC) -c $(CXXFLAGS) $<
 
 $(PROG): $(OFILES)

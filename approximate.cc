@@ -84,7 +84,7 @@ approximate(const vector<string> &original_paths,const vector<string> &smooth_pa
 	printf("starting approximation\n");
 
     printf("interpolating smooth samples\n");
-    interpolate(smooth_samples, land_mask, invalid_mask, time_size, T_INTERP, true, false);
+    interpolate(smooth_samples, land_mask, invalid_mask, time_size, T_INTERP, PASS_THRESH, true, false);
     printf("interpolation completed\n");
 
  	calc_approximate(smooth_samples,clear_samples, land_mask,invalid_mask, approx,dims); 
@@ -148,7 +148,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
             }
         }
         //save_test_nc_fullbands(bt08_slice,bt10_slice,bt11_slice,bt12_slice,sst_slice,save_loc.c_str());
-        save_approx(save_loc, save_slice,"brightness_temperature_08um6", true);
+        save_and_update(save_loc, save_slice,"brightness_temperature_08um6", true);
         printf("generated file %s\n", save_loc.c_str());
 
     }
@@ -171,7 +171,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
             }
         }
         //save_test_nc_fullbands(bt08_slice,bt10_slice,bt11_slice,bt12_slice,sst_slice,save_loc.c_str());
-        save_approx(save_loc, save_slice,"brightness_temperature_10um4", false);
+        save_and_update(save_loc, save_slice,"brightness_temperature_10um4", false);
         printf("generated file %s\n", save_loc.c_str());
 
     }
@@ -193,7 +193,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
             }
         }
         //save_test_nc_fullbands(bt08_slice,bt10_slice,bt11_slice,bt12_slice,sst_slice,save_loc.c_str());
-        save_approx(save_loc, save_slice,"brightness_temperature_11um2", false);
+        save_and_update(save_loc, save_slice,"brightness_temperature_11um2", false);
         printf("generated file %s\n", save_loc.c_str());
 
     }
@@ -215,7 +215,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
             }
         }
         //save_test_nc_fullbands(bt08_slice,bt10_slice,bt11_slice,bt12_slice,sst_slice,save_loc.c_str());
-        save_approx(save_loc, save_slice,"brightness_temperature_12um3", false);
+        save_and_update(save_loc, save_slice,"brightness_temperature_12um3", false);
         printf("generated file %s\n", save_loc.c_str());
 
     }
@@ -236,7 +236,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
             }
         }
         //save_test_nc_fullbands(bt08_slice,bt10_slice,bt11_slice,bt12_slice,sst_slice,save_loc.c_str());
-        save_approx(save_loc, save_slice,"sea_surface_temperature", false);
+        save_and_update(save_loc, save_slice,"sea_surface_temperature", false);
         approx_paths.push_back(save_loc.c_str());
         printf("generated file %s\n", save_loc.c_str());
 

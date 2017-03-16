@@ -10,7 +10,7 @@ clear_samples_compare(const Mat1f &bt11, const Mat1f &bt11_clear, const Mat1b &l
     //int t_lag0=3;           //(one hour padding on each side)
     //int t_lag1=1;           
     int w1=2;
-
+    int w0 = 0;
     int t_lag2=2*t_lag0;    //(2 hours padding on each side)
     int w2=2;               // spatial window 2*w1+1 
     
@@ -19,12 +19,16 @@ clear_samples_compare(const Mat1f &bt11, const Mat1f &bt11_clear, const Mat1b &l
 
     Mat1f TL1(HEIGHT,WIDTH);
     Mat1f TL2(HEIGHT,WIDTH);
+    Mat1f TL0(HEIGHT,WIDTH);
     Mat1f t_lag0_count(HEIGHT,WIDTH);
 
     TL1.setTo(NAN);
     TL2.setTo(NAN);
+    TL0.setTo(NAN);
+
     t_lag0_count.setTo(0);
 
+    int window0[3] = {w0,w0,t_lag1};
     int window1[3] = {w1,w1,t_lag1};
     int window2[3] = {w2,w2,t_lag2};
     
@@ -49,10 +53,13 @@ clear_samples_compare(const Mat1f &bt11, const Mat1f &bt11_clear, const Mat1b &l
     windowed_nanmean_2nd_pass(bt11_clear, t_lag0_count, land_mask,invalid_mask, TL2, window2, cur_mid);
 
     printf("finished second window\n");
+
+    windowed_nanmean_2nd_pass(bt11, t_lag0_count, land_mask,invalid_mask, TL0, window0, cur_mid);
+
     for(y=0;y<HEIGHT;y++){
         for(x=0;x<WIDTH;x++){
             if(!std::isnan(TL1(y,x)) && !std::isnan(TL2(y,x))){
-                if(((TL2(y,x)-TL1(y,x)) < PASS2 || TL2(y,x) - TL1(y,x) < 0) && !std::isnan(bt11_clear(y,x,cur_mid))){
+                if( bt11(y,x,cur_mid) > TL0(y,x) - PASS2 && ((TL2(y,x)-TL1(y,x) < PASS2 && !std::isnan(bt11_clear(y,x,cur_mid))))){ //|| bt11(y,x,cur_mid) - TL2(y,x) > PASS2 )){
                     bt11_masked(y,x) = 255;
                 }
                 //if( !std::isnan(bt11_clear(y,x,cur_mid))){
@@ -61,11 +68,15 @@ clear_samples_compare(const Mat1f &bt11, const Mat1f &bt11_clear, const Mat1b &l
             }
         }
     }
-
-    filename = "data/TL1/TL1_" + convert_int_to_string(iter);
+    
+    /*
+    filename = "data/TL1/TL1_" + convert_int_to_string(iter) +".nc";
     save_test_nc_float(TL1,filename.c_str());
-    filename = "data/TL2/TL2_" + convert_int_to_string(iter);
+    filename = "data/TL2/TL2_" + convert_int_to_string(iter) + ".nc";
     save_test_nc_float(TL2,filename.c_str());
+    filename = "data/TL0/TL0_" + convert_int_to_string(iter) + ".nc";
+    save_test_nc_float(TL0,filename.c_str());
+    */
 }    
 
 /* function deals with opening files, passes matrix to second passfunction, and 
@@ -85,7 +96,7 @@ second_pass(const vector<string> &clear_paths, const vector<string> &original_pa
 
 	string folder_loc = "data/pass2";
 	string filename, save_loc;
-	string variable_name = "brightness_temperature_11um2";
+	string variable_name = "sea_surface_temperature";
 	string original_filenames[25];
 	string clear_filenames[25];
 
@@ -100,6 +111,8 @@ second_pass(const vector<string> &clear_paths, const vector<string> &original_pa
 	for(j=0;j<time_size;j++){
 		// read granule one band
     	read_mask(clear_paths[j],clear_mask,-1);
+        //read_acspo(original_paths[j+FILTER_WINDOW_LAG],clear_mask,-1);
+      
     	readgranule_oneband(original_paths[j+FILTER_WINDOW_LAG],sst_samples,j,variable_name);
     	readgranule_oneband(original_paths[j+FILTER_WINDOW_LAG],clear_samples,j,variable_name);
     	apply_mask_slice(clear_mask, clear_samples, j,false);
@@ -139,6 +152,7 @@ second_pass(const vector<string> &clear_paths, const vector<string> &original_pa
         printf("finished iteration %d\n",iter);
         if(time_ind < sample_size){
             read_mask(clear_paths[time_ind],clear_mask,-1);
+            //read_acspo(original_paths[time_ind+FILTER_WINDOW_LAG],clear_mask,-1);
             //printf("original path name = %s\n", original_paths[time_ind + FILTER_WINDOW_LAG].c_str());
             //printf("clear path name = %s\n", clear_paths[time_ind].c_str());
     		readgranule_oneband(original_paths[time_ind+FILTER_WINDOW_LAG],sst_samples,new_granule_ind,variable_name);

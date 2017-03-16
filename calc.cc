@@ -49,59 +49,6 @@ compute_gradient(const Mat1f &bt11, Mat1f &mags, int *dims, int *inds)
     }
 }
 
-float
-compute_nanmean(const Mat1f &data, const int *loc, const int *windows, int *inds)
-{
-  float sum = 0;
-  float d;
-    int i,j,k;
-  int count = 0;
-  int y = loc[0]; int x = loc[1]; int z = loc[2];
-  int w1 = windows[0]; int w2 = windows[1]; int w3 = windows[2];
-
-    for(i=-w1;i<w1+1;i++){
-        for(j=-w2;j<w2+1;j++){
-            for(k=-w3;k<w3+1;k++){
-                d = data(y+i,x+j,inds[z+k]);
-                if(!std::isnan(d)){
-                    count += 1;
-                    sum += d;
-                }
-            }
-        }
-    }
-    return sum/count;
-}
-
-void
-fill_nans(const Mat1f &bt11_masked, Mat1s &test_slice){
-    #pragma omp for
-    for(int y = 0;y<HEIGHT;y++){
-		for(int x = 0;x<WIDTH;x++){
-        	if(std::isnan(bt11_masked(y,x))){
-        		test_slice(y,x) = FILLVALUE;
-        	}
-            else{
-            	test_slice(y,x) = round((bt11_masked(y,x)-OFFSET)/SCALE);
-        	}
-        }
-    }
-}
-
-void
-fill_nans_3d(const Mat1f &bt11_3d, Mat1s &test_slice, int slice){
-    #pragma omp for
-    for(int y = 0;y<HEIGHT;y++){
-    for(int x = 0;x<WIDTH;x++){
-          if(std::isnan(bt11_3d(y,x,slice))){
-            test_slice(y,x) = (short) FILLVALUE;
-          }
-            else{
-              test_slice(y,x) = (short) (round((bt11_3d(y,x,slice)-OFFSET)/SCALE));
-          }
-        }
-    }
-}
 
 void
 calculate_diffs(const Mat1f &a, const Mat1f &b, Mat1f &diffs,int cur_ind, bool absval){
@@ -141,7 +88,7 @@ calculate_sums(const Mat1f &a, const Mat1f &b, Mat1f &sums,int* dims, int *inds)
 
 void 
 pwl_interp_1d (const vector<int> &xd, const vector<float> &yd, const vector<int> &xi, 
-                vector<float> &yi, float threshold)
+                vector<float> &yi, float threshold_y, float threshold_x)
 
 
 //  Purpose:
@@ -192,7 +139,7 @@ pwl_interp_1d (const vector<int> &xd, const vector<float> &yd, const vector<int>
       for ( k = 0; k< nd-1; k++ ){
 
         if(xi[pos] < xd[k+1]){
-          if(fabs(yd[k+1] - yd[k]) < threshold){
+          if(fabs(yd[k+1] - yd[k]) < threshold_y && fabs(xd[k+1] - xd[k]) < threshold_x){
 
             while(xi[pos] < xd[k+1]){
 
@@ -241,8 +188,8 @@ convert_int_to_string(int val){
 }
 
 void
-windowed_nanmean_3d(const Mat1f &samples, const Mat1b &land_mask, const Mat1b &invalid_mask, const Mat1b &ice_masks, 
-                    Mat1f &nanmean, int *window, int *inds, float threshold)
+windowed_nanmean_3d(const Mat1f &samples, const Mat1b &land_mask, const Mat1b &invalid_mask, 
+                    Mat1f &nanmean, int *window, float threshold)
 {
   Mat1f time_sum(HEIGHT,WIDTH);
   Mat1f time_count(HEIGHT,WIDTH);
@@ -259,8 +206,8 @@ windowed_nanmean_3d(const Mat1f &samples, const Mat1b &land_mask, const Mat1b &i
   for(y=0;y<HEIGHT;y++){
     for(x=0;x<WIDTH;x++){
       for(t=0;t<t_len;t++){
-        if(!std::isnan(samples(y,x,inds[t]))){
-          time_sum(y,x) += samples(y,x,inds[t]);
+        if(!std::isnan(samples(y,x,t))){
+          time_sum(y,x) += samples(y,x,t);
           time_count(y,x) += 1;
         }
       }
@@ -317,7 +264,7 @@ windowed_nanmean_3d(const Mat1f &samples, const Mat1b &land_mask, const Mat1b &i
 
 
       //printf("count = %f sum = %f\n", count, sum);
-      if(land_mask(y,x)==0 && invalid_mask(y,x) ==0 && ice_masks(y,x,t_dim) ==0){
+      if(land_mask(y,x)==0 && invalid_mask(y,x) ==0 ){
         // calculate this pixels value at 3dsmooth(y,x)
         if(count>threshold){
           nanmean(y,x) = sum /count;
@@ -355,6 +302,19 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
       }
     }
   }
+
+  if(y_dim == 0){
+    for(y=0;y<HEIGHT;y++){
+      for(x=0;x<WIDTH;x++){
+        if(time_count(y,x) > 0){
+          nanmean(y,x) = time_sum(y,x) / time_count(y,x);
+        }
+      }
+    }
+    return;
+  }
+
+  
 
   printf("finished nan sum of time\n");
   //calculate stats in time dimension
@@ -439,7 +399,7 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
   float temp_bt10;
   float temp_bt11;
   float temp_bt12;
-  float clear_sample;
+
 
   float bt08_mean;
   float bt10_mean;
@@ -447,7 +407,7 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
   float bt12_mean;
 
   Mat1f counts(HEIGHT,WIDTH);
-  Mat1f vals(HEIGHT,WIDTH);
+  //Mat1f vals(HEIGHT,WIDTH);
 
   Mat1b eigen_mask(HEIGHT, WIDTH);
   eigen_mask.setTo(0);
@@ -482,7 +442,7 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
               temp_bt10 = bt10(y+i,x+j,t);
               temp_bt11 = bt11(y+i,x+j,t);
               temp_bt12 = bt12(y+i,x+j,t);
-              clear_sample = clear_samples(y+i,x+j,t);
+
               if(!std::isnan(temp_bt08) && !std::isnan(temp_bt10) && !std::isnan(temp_bt11) && !std::isnan(temp_bt12)){
                 valid_bt08.push_back(temp_bt08);
                 valid_bt10.push_back(temp_bt10);
@@ -533,7 +493,7 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
           }
           
           res_mean = window_sum/(float)valid_bt08.size();
-          vals(y,x) = res_mean;
+          //vals(y,x) = res_mean;
           if(res_mean > T_EIGEN){
             clear_samples(y,x) = NAN;
           }
@@ -544,9 +504,145 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
       }
     }
   }
-  //SAVENC(eigen_mask);
+  //SAVENC(vals);
 }
 
+
+void
+compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int cur_ind)
+{
+  int y,x,t,i,j,k;
+  int y_delta = 2;
+  int x_delta = 2;
+  int t_delta = 2;
+
+  int min_num = (2*y_delta +1) *(2*x_delta + 1)/2;
+  printf("min num = %d\n",min_num);
+  float t0_sum,t1_sum,t2_sum,t3_sum,t4_sum,count,mean,window_sum,row_sum, res_mean;
+  float temp_t0;
+  float temp_t1;
+  float temp_t2;
+  float temp_t3;
+  float temp_t4;
+
+
+  float t0_mean;
+  float t1_mean;
+  float t2_mean;
+  float t3_mean;
+  float t4_mean;
+
+  Mat1f counts(HEIGHT,WIDTH);
+  //Mat1f vals(HEIGHT,WIDTH);
+
+  Mat1b eigen_mask(HEIGHT, WIDTH);
+  eigen_mask.setTo(0);
+  vector<float> valid_t0;
+  vector<float> valid_t1;
+  vector<float> valid_t2;
+  vector<float> valid_t3;
+  vector<float> valid_t4;
+
+  vector<int> left_inds;
+
+  VectorXf ones(5);
+  ones.setOnes();
+  VectorXf e1;
+  MatrixXf r;
+  MatrixXf A;
+
+  for(y=y_delta;y<HEIGHT-y_delta;y++){
+    for(x=x_delta;x<WIDTH-x_delta;x++){
+      if(!std::isnan(clear_samples(y,x)) && border_mask(y,x) == 0){
+    
+        // calc first window
+        // we know that first left are nans so we don't calculate left inds     
+        t0_sum=t1_sum=t2_sum=t3_sum=t4_sum=0;
+        valid_t0.clear();
+        valid_t1.clear();
+        valid_t2.clear();
+        valid_t3.clear();
+        valid_t4.clear();
+        for(i=-y_delta;i<y_delta+1;i++){
+          for(j=-x_delta;j<x_delta+1;j++){              
+                          
+              temp_t0 = bt11(y+i,x+j,0);
+              temp_t1 = bt11(y+i,x+j,1);
+              temp_t2 = bt11(y+i,x+j,2);
+              temp_t3 = bt11(y+i,x+j,3);
+              temp_t4 = bt11(y+i,x+j,4);
+
+              // land and invalid pixels have been removed before calling this function
+              if(!std::isnan(temp_t0) && !std::isnan(temp_t1) && !std::isnan(temp_t2) && !std::isnan(temp_t3) && !std::isnan(temp_t4)){
+                valid_t0.push_back(temp_t0);
+                valid_t1.push_back(temp_t1);
+                valid_t2.push_back(temp_t2);
+                valid_t3.push_back(temp_t3);
+                valid_t4.push_back(temp_t4);
+
+                t0_sum+=temp_t0;
+                t1_sum+=temp_t1;
+                t2_sum+=temp_t2;
+                t3_sum+=temp_t3;
+                t4_sum+=temp_t4;
+              }
+            
+          }
+        }
+
+        //if numberof pixels in window is greater tan threshold
+        // calculate the mean of the norm of the pixels
+        // projected into the second eigenvector
+        count = valid_t0.size();
+        ///printf("count = %f\n",count);
+        counts(y,x) = count;
+        if(valid_t0.size() > min_num){
+          t0_mean =t0_sum/count;
+          t1_mean =t1_sum/count;
+          t2_mean =t2_sum/count;
+          t3_mean =t3_sum/count;
+          t4_mean =t4_sum/count;
+
+          MatrixXf window(valid_t0.size(),5);
+          for(i=0;i<valid_t0.size();i++){
+            window(i,0) = valid_t0[i] - t0_mean;
+            window(i,1) = valid_t1[i] - t1_mean;
+            window(i,2) = valid_t2[i] - t2_mean;
+            window(i,3) = valid_t3[i] - t3_mean;
+            window(i,4) = valid_t4[i] - t4_mean;
+          }
+          
+          A = (window.transpose()*window);
+          //std::cout << "Here is the matrix A:\n" << A << std::endl;
+          e1 = A*(A*ones);
+          e1/=sqrt(e1.transpose()*e1);
+          r = window - (window*e1)*e1.transpose();
+          window_sum =0;
+          for(i=0;i<valid_t0.size();i++){
+            row_sum = 0;
+            row_sum+=r(i,0)*r(i,0);
+            row_sum+=r(i,1)*r(i,1);
+            row_sum+=r(i,2)*r(i,2);
+            row_sum+=r(i,3)*r(i,3);
+            row_sum+=r(i,4)*r(i,4);
+            row_sum = sqrt(row_sum);
+            window_sum += row_sum;
+          }
+          
+          res_mean = window_sum/(float)valid_t0.size();
+          //vals(y,x) = res_mean;
+          if(res_mean > T_TL0){
+            clear_samples(y,x) = NAN;
+          }
+          else{
+            eigen_mask(y,x) = 1;
+          }
+        }
+      }
+    }
+  }
+  //SAVENC(vals);
+}
 
 void
 calculate_bt_ratio(const Mat1f &bt08, const Mat1f &bt11,const Mat1f &bt12, 
@@ -576,4 +672,72 @@ generate_filename(const string file_loc)
 
   filename = file_loc.substr(pos);
   return filename;
+}
+
+
+string
+generate_foldername(const string file_loc)
+{
+  string div = "/";
+  int temp_pos = 0;
+  int pos = temp_pos;
+  string filename;
+  while(temp_pos != string::npos){
+    temp_pos = file_loc.find(div,pos+1);
+    if(temp_pos != string::npos){
+      pos = temp_pos;
+    }
+  }
+
+  filename = file_loc.substr(0,pos);
+  return filename;
+}
+
+void
+remove_high_derivatives(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid_mask, int time_size)
+{
+  int x,y,i,t,j;
+  bool is_nan;
+  for(y=0;y<HEIGHT;y++){
+    for(x=0;x<WIDTH;x++){
+      if(invalid_mask(y,x) == 0 && land_mask(y,x) == 0){
+
+        for(t=0;t<time_size;t++){
+          is_nan = std::isnan(smooth(y,x,t));
+          if(std::isnan(smooth(y,x,t)) || (!std::isnan(smooth(y,x,t+1)) && fabs(smooth(y,x,t) - smooth(y,x,t+1)) > T_DERIV) || std::isnan(smooth(y,x,t+1))){ 
+            smooth(y,x,t) = NAN;
+          }
+        }
+      }
+    }
+  }
+}
+
+void
+remove_last_value(Mat1f &collated_interp,const Mat1b &invalid_mask,const Mat1b &land_mask, int time_size)
+{
+  int y,x,t;
+  for(y=0;y<HEIGHT;y++){
+    for(x=0;x<WIDTH;x++){
+      for(t=0;t<time_size-1;t++){
+        if(!std::isnan(collated_interp(y,x,t)) && std::isnan(collated_interp(y,x,t+1))){
+          collated_interp(y,x,t) = NAN;
+        }
+      }
+    }
+  }
+}
+
+void
+combine_l2pmasks(const Mat1b &land_mask,const Mat1b &invalid_mask,Mat1b &l2p_mask)
+{
+  int y,x;
+  for(y=0;y<HEIGHT;++y){
+    for(x=0;x<WIDTH;++x){
+      l2p_mask(y,x) = 0;
+      if(land_mask(y,x) == 255 || invalid_mask(y,x) == 255){
+        l2p_mask(y,x) = 255;
+      }
+    }
+  }
 }
