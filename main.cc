@@ -17,14 +17,10 @@ using namespace Eigen;
 #include "calc.cc"
 #include "mask.cc"
 #include "filter.cc"
-#include "smoothing.cc"
-#include "smoothing_collated.cc"
+#include "smooth_no_padding.cc"
 #include "interpolate.cc"
-//#include "approximate.cc"
-#include "subsample.cc"
 #include "second_pass.cc"
-#include "collated_fit.cc"
-//#include "generateLUT.cc"
+#include "collated_fit_no_padding.cc"
 #define NDEBUG
 
 
@@ -34,24 +30,26 @@ main(int argc, char *argv[])
 
 
     auto start = std::chrono::system_clock::now();
-    int i;
     int window[3] = {CLEAR_SPATIAL_SMOOTH, CLEAR_SPATIAL_SMOOTH, SMOOTH_WINDOW_LAG};
 
-    if(argc < 3){
+    if(argc < 4){
         eprintf("Usage: ./ahil2c <granule_list> <reference_file> <interp>");
     }
 
-    bool interp;
-    if(argv[3] == "h"){
+    bool interp = true;
+    if(strcmp(argv[3], "--interpolate") != 0){
         interp = false;
     }
     else{
         interp = true;
+        printf("interpolating\n");
     }
+
     Mat1b land_mask(HEIGHT,WIDTH);
     Mat1b invalid_mask(HEIGHT,WIDTH);
     Mat1b border_mask(HEIGHT,WIDTH);
     Mat1b l2p_mask(HEIGHT,WIDTH);
+    Mat1b ice_mask(HEIGHT,WIDTH);
 
     vector<string> original_paths;
     vector<string> second_pass_paths;
@@ -65,18 +63,28 @@ main(int argc, char *argv[])
 
     //function to get land mask and invalid(corners) mask
     get_l2pmask(original_paths[0].c_str(),land_mask,invalid_mask);
+    
+    //get ice_mask
+    get_icemask(reference_file, ice_mask);
+
+
     //get_lats(original_paths[0], lats);
     get_landborders(land_mask, border_mask, LAND_KERNEL);
-    combine_l2pmasks(land_mask,invalid_mask,l2p_mask);
+    
+    combine_l2pmasks(land_mask,invalid_mask, ice_mask, l2p_mask);
+    printf("read land mask\n");
     land_mask.release();
     invalid_mask.release();
+    ice_mask.release();
     //SAVENC(border_mask);
-    printf("read land mask\n");
+    
+    //SAVENC(l2p_mask);
     string filename;
     string clearpath, smoothpath, approxpath;
         
-    
+    /*
     //for debugging purposes
+    int i;
     for(i =0;i<201;i++){
         filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG]);
         clearpath = "data/clear" + filename;
@@ -89,24 +97,35 @@ main(int argc, char *argv[])
         clearpath = "data/pass2" + filename;
         second_pass_paths.push_back(clearpath.c_str());
     }
-    
-    /*
-    setupLUT(second_pass_paths, original_paths, reference_file);
     */
 
-    /*
+    
     printf("starting cloud filter\n");
-    filter_clouds(original_paths, land_mask,invalid_mask, border_mask, clear_paths, reference_file);
-    printf("Cloud filter completed for %d granules\n",clear_paths.size());      
+
+
+    filter_clouds(original_paths, l2p_mask, border_mask, clear_paths, reference_file);
     
-    second_pass(clear_paths, original_paths, second_pass_paths, land_mask, invalid_mask);
-    */
+
+    int clear_size = clear_paths.size();
+    printf("Cloud filter completed for %d granules\n",clear_size);      
+    
+    
+    printf("starting second pass\n");
+
+    second_pass(clear_paths, original_paths, second_pass_paths, l2p_mask);
+
+
+    printf("finished second pass\n");
+
+    printf("starting smoothing operation\n");
+    smooth_samples(second_pass_paths, original_paths, l2p_mask, smooth_paths, reference_file, window, false);
+    int smooth_size = smooth_paths.size();
+    printf("Smoothing completed for %d granules\n",smooth_size);
     
     /*
-    for(i =0;i<159;i++){
-        filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG+SMOOTH_WINDOW_LAG+SECOND_PASS_LAG]);
-        printf("file = %s\n",filename.c_str());
-        smoothpath = "data/smooth" + filename;
+    for(i =0;i<177;i++){
+        filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG+SECOND_PASS_LAG]);
+        smoothpath = "data/smooth_test" + filename;
         smooth_paths.push_back(smoothpath.c_str());
     }
     */
@@ -127,52 +146,15 @@ main(int argc, char *argv[])
     */
 
     
-    /*
-    approx_clear(smooth_paths,second_pass_paths, original_paths,land_mask, invalid_mask, approx_paths,reference_file,interp);
-    auto end = std::chrono::system_clock::now();
-    auto elapsed =  std::chrono::duration_cast<std::chrono::minutes>(end - start);
-    std::cout << "time to compute rhs = " << elapsed.count() << '\n';
-    */
-    /*
-    for(i =0;i<153;i++){
-        filename = generate_filename(smooth_paths[i+13]);
-        clearpath = "data/collated_mat" + filename;
-        collated_paths.push_back(clearpath.c_str());
-    }
-    smooth_paths.clear();
+    
+    //approx_clear(smooth_paths,second_pass_paths, original_paths,land_mask, invalid_mask, approx_paths,reference_file,interp);
+    printf("starting approximation and collation\n");
 
-    printf("starting smoothing operation\n");
-    window[0] = COLLATED_SPATIAL_SMOOTH;
-    window[1] = COLLATED_SPATIAL_SMOOTH;
-    window[2] = COLLATED_SMOOTH_LAG;
-    smooth_samples_collated(collated_paths, original_paths, land_mask, invalid_mask, smooth_paths, reference_file, window);
-    printf("Smoothing completed for %d granules\n",smooth_paths.size());
-    */
-    /*
-    printf("starting approximation\n");
-    approx_clear(smooth_paths, second_pass_paths, original_paths,land_mask, invalid_mask,approx_paths);
-    printf("SApproximation completed for %d granules\n",approx_paths.size());
-     
+    approx_clear(smooth_paths, second_pass_paths, original_paths,l2p_mask, reference_file, interp);
+    printf("finished approximation and collation\n");
+
+    auto end = std::chrono::system_clock::now();
+    auto elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
+    std::cout << "time to compute code = " << elapsed.count() << " seconds\n";
     
-    
-    printf("starting subsample\n");
-    subsample(approx_paths,original_paths, smooth_paths, collated_paths, second_pass_paths, land_mask,invalid_mask);
-    printf("Subsample completed for %d granules\n",approx_paths.size());
-    
-    */
-    
-    /*
-    for(i =3;i<176;i++){
-        filename = generate_filename(smooth_paths[i]);
-        if(filename[11] == '0' && filename[12] == '0'){
-            approxpath = "data/collated" + filename;
-            collated_paths.push_back(approxpath.c_str());
-        }
-    }  
-        
-    
-    printf("starting subsample\n");
-    enhance_collated(collated_paths, approx_paths, land_mask, invalid_mask,true);
-    printf("Subsample completed for %d granules\n",approx_paths.size());
-    */
 }

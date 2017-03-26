@@ -1,0 +1,3 @@
+g++ -I eigen-eigen-26667be4f70b  -c -g -Wall -Wpedantic -Wfatal-errors -Wunused-parameter -march=native -O2 -fopenmp -std=c++11  main.cc
+g++ -I eigen-eigen-26667be4f70b  -c -g -Wall -Wpedantic -Wfatal-errors -Wunused-parameter -march=native -O2 -fopenmp -std=c++11  hermite.cc
+g++  -o ahil2c main.o hermite.o  -fopenmp -lm -lnetcdf -lopencv_core -lopencv_imgproc -lopencv_highgui -Wl,--no-as-needed 

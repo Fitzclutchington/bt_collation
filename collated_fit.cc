@@ -244,7 +244,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     //approx is HEIGHT x WIDTH x time_size-1
     int approx_time = time_size-1;
     //int time_size = 10;
-    int original_lag = FILTER_WINDOW_LAG+SECOND_PASS_LAG+SMOOTH_WINDOW_LAG;
+    int original_lag = FILTER_WINDOW_LAG+SECOND_PASS_LAG;
 
     int i,j,y,x;
     int dims[3] = {HEIGHT,WIDTH,time_size};
@@ -254,7 +254,9 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     Mat1f smooth_samples(3,dims);
 
     string approx_folder_loc = "data/approx";
+    string approx_folder_loc2 = "data/approx2";
     string collated_folder_loc = "data/collated_mat";
+    string collated_folder_loc2 = "data/collated_mat2";
     string smooth_folder_loc = "data/smooth_collate";
     string filename, save_loc;
     
@@ -347,7 +349,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
         
     }
     interpolate_hermite(smooth_interp,land_mask,invalid_mask,smooth_interp_size,T_INTERP, 2*INTERP_DIST,false);
-    //save_mat(smooth2_paths, smooth_interp, "sea_surface_temperature",true);
+    save_mat(smooth2_paths, smooth_interp, "sea_surface_temperature",true);
     
     smooth_collated.release();
 
@@ -358,7 +360,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     printf("smooth inds lag = %d\n",smooth_inds[0]);
 
     for(j=0;j<smooth_interp_size;j++){
-        read_mask(clear_paths[j+SMOOTH_WINDOW_LAG+smooth_inds[0]],clear_masks,-1);
+        read_mask(clear_paths[j+smooth_inds[0]],clear_masks,-1);
         readgranule_oneband(original_paths[j+original_lag+smooth_inds[0]],clear_samples,j,"sea_surface_temperature");
         apply_mask_slice(clear_masks,clear_samples,j,false);
         printf("read file %s\n",original_paths[j+original_lag+smooth_inds[0]].c_str());
@@ -471,7 +473,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
 
     for(i=3;i<collated_interp_paths.size()-3;i++){
         filename = generate_filename(collated_interp_paths[i]);
-        save_loc = approx_folder_loc + filename;
+        save_loc = approx_folder_loc2 + filename;
         collated_approx_paths.push_back(save_loc);
         collated_smooth_paths.push_back(collated_interp_paths[i]);
     }
@@ -504,7 +506,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     calc_approximate(collated_smooth,reinstated_clear, land_mask,invalid_mask,collated_approx,dims[2]);
     printf("finished approximation for brightness_temperature_08um6\n");
     //Mat1f collated_approx(3,dims);
-    //save_mat(collated_approx_paths, collated_approx, "sea_surface_temperature",true);
+    save_mat(collated_approx_paths, collated_approx, "sea_surface_temperature",true);
 
     collated_paths.clear(); collated_interp_paths.clear();collated_inds.clear();
 
@@ -522,7 +524,7 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     //generate filenames for interp collated
     for(i=collated_inds[0];i<collated_approx_paths.size()-COLLATED_LAG;i++){
         filename = generate_filename(approx_paths[i]); 
-        save_loc = collated_folder_loc + filename; 
+        save_loc = collated_folder_loc2 + filename; 
         printf("approx filename = %s\n",save_loc.c_str());    
         collated_interp_paths.push_back(save_loc);
     }

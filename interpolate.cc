@@ -3,6 +3,7 @@ interpolate(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid_mask, i
 {
 	int x,y,i,t,j;
 	int w = 1;
+	int xi_size = 0; int xd_size = 0;
 	float val=0,count = 0;
 	vector<int> xd;
 	vector<float> yd;
@@ -71,10 +72,13 @@ interpolate(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid_mask, i
 					}
 					
 				}
-			
-				if(xd.size() > 0 && xi.size()>0){
+				
+				xi_size = xi.size();
+				xd_size = xd.size();
+
+				if(xd_size && xi_size){
 					pwl_interp_1d(xd,yd,xi,yi,threshold_y,threshold_x);
-					for(i=0;i<xi.size();i++){
+					for(i=0;i<xi_size;i++){
 						smooth(y,x,xi[i]) = yi[i];
 					}
 				}
@@ -86,11 +90,10 @@ interpolate(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid_mask, i
 }
 
 void
-interpolate_hermite(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid_mask, int time_size, float y_threshold, float x_threshold, bool thresh)
+interpolate_hermite(Mat1f &smooth,  const Mat1b &l2p_mask, int time_size, float y_threshold, float x_threshold, bool thresh)
 {
-	int x,y,i,t,j;
-	int w = 1;
-	float val=0,count = 0;
+	int x,y,i,t;
+	int xi_size = 0; int xd_size = 0;
 	vector<double> xd;  // data points
 	vector<double> yd; //data values
 	vector<double> xi; //interpolation points
@@ -98,7 +101,7 @@ interpolate_hermite(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid
 
 	for(y=0;y<HEIGHT;y++){
 		for(x=0;x<WIDTH;x++){
-			if(invalid_mask(y,x) == 0 && land_mask(y,x) == 0){
+			if(l2p_mask(y,x) == 0){
 				xd.clear();
 				yd.clear();
 				xi.clear();
@@ -132,11 +135,13 @@ interpolate_hermite(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid
 					
 				}
 				
+				xd_size = xd.size();
+				xi_size = xi.size();
 
-				if(xd.size() > 0 && xi.size()>0){
+				if(xd_size > 0 && xi_size >0){
 					MonotCubicInterpolator MCI(xd ,yd);
 					
-					for(i=0;i<xi.size();i++){
+					for(i=0;i<xi_size;i++){
 
 						smooth(y,x,xi[i]) = MCI.evaluate(xi[i], y_threshold, x_threshold);
 					}

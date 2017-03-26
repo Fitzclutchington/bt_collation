@@ -46,7 +46,7 @@ calc_approximate(const Mat1f &bt11_smooth, const Mat1f &bt11_clear, const Mat1b 
 
 void
 approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_paths, 
-			 const vector<string> &original_paths,const Mat1b &land_mask, const Mat1b &invalid_mask, vector<string> &approx_paths){	
+			 const vector<string> &original_paths,const Mat1b &land_mask, const Mat1b &invalid_mask, vector<string> &approx_paths, bool interp){	
 
 
     int time_size = smooth_paths.size();

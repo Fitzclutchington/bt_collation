@@ -1,11 +1,10 @@
 const int WIDTH = 5500;
 const int HEIGHT = 5500;
-const int TIMEINT = 9;
+const int TIMEINT = 144;
 const int MAXDIMS = 5;
 const bool DEBUG = true;
 const float OFFSET = 273.15;
 const float SCALE = 0.1;
-const short FILLVALUE = 1<<15;
 const float PR_CLEAR = 0.1;
 const int   MIN_POINTS = 6;
 const float DELTA_SST = 0.1;

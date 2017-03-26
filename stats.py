@@ -12,10 +12,13 @@ def read_var(cdf,variable):
 
 clear_files = sorted(glob.glob("data/clear/*.nc"))
 approx_files = sorted(glob.glob("data/approx/*.nc"))
-interp_files = sorted(glob.glob("data/collated_interp/*.nc"))
 collated_files = sorted(glob.glob("data/collated_mat/*.nc"))
+approx2_files = sorted(glob.glob("data/approx2/*.nc"))
+collated2_files = sorted(glob.glob("data/collated_mat2/*.nc"))
 pass2_files = sorted(glob.glob("data/pass2/*.nc"))
-smooth_files = sorted(glob.glob("data/smooth/*.nc"))
+smooth_files = sorted(glob.glob("data/smooth_test/*.nc"))
+scollate_files = sorted(glob.glob("data/smooth_collate/*.nc"))
+
 #smooth_collate_files = sorted(glob.glob("data/smooth_collate/*.nc"))
 #collated_old = sorted(glob.glob("data/collated_old_eigen/*.nc"))
 original_files = [line.rstrip('\n') for line in open('ahitest.txt')]
@@ -27,16 +30,21 @@ smooth_filenames = [x.split('/')[2] for x in smooth_files]
 #smooth_collate_filenames = [x.split('/')[2] for x in smooth_collate_files]
 
 collated = []
-collated_interp = []
+collated2 = []
+scollated = []
 sst_std = []
 approx_std = []
+approx2_std = []
 clear_std =[]
 #smooth_collated =[]
 
 num_clear = []
 clear_pass2 = []
 clear_approx = []
+clear_approx2 = []
 clear_col = []
+clear_col2 = []
+clear_scol = []
 clear_interp = []
 #clear_smooth = []
 acspo = []
@@ -110,19 +118,29 @@ div2 = make_axes_locatable(ax2)
 cax2 = div2.append_axes("right", size="5%", pad=0.05)
 cbar2 = plt.colorbar(img2, cax=cax2)
 """
-for approx_file in approx_files:
+for approx_file, approx2_file in zip(approx_files,approx2_files):
 	cdf = netCDF4.Dataset(approx_file)
-	approx = read_var(cdf,"sea_surface_temperature")
+	vals = read_var(cdf,"sea_surface_temperature")
 
 	cdf.close()
 
-	approx_std.append(np.nanstd(approx-ref_sst))
-	clear_approx.append(np.isfinite(approx).sum())
 
-	pass2_filename = pass2_files[pass2_filenames.index(approx_file.split('/')[2])]
-	cdf = netCDF4.Dataset(pass2_filename)
-	pass2 = read_var(cdf,"brightness_temperature_11um2")
+	approx_std.append(np.nanstd(vals-ref_sst))
+	clear_approx.append(np.isfinite(vals).sum())
+
+	cdf = netCDF4.Dataset(approx2_file)
+	vals = read_var(cdf,"sea_surface_temperature")
+
+	approx2_std.append(np.nanstd(vals-ref_sst))
+	clear_approx2.append(np.isfinite(vals).sum())
+
+
 	cdf.close()
+
+	#pass2_filename = pass2_files[pass2_filenames.index(approx_file.split('/')[2])]
+	#cdf = netCDF4.Dataset(pass2_filename)
+	#pass2 = read_var(cdf,"brightness_temperature_11um2")
+	#cdf.close()
 
 	#clear_filename = clear_files[clear_filenames.index(approx_file.split('/')[2])]
 	#cdf = netCDF4.Dataset(clear_filename)
@@ -134,22 +152,21 @@ for approx_file in approx_files:
 	print sst_filename
 	cdf = netCDF4.Dataset(sst_filename)
 	l2p_flags = read_var(cdf,'l2p_flags')
-	sst_pass2 = read_var(cdf, 'sea_surface_temperature')
+	sst_acspo = read_var(cdf, 'sea_surface_temperature')
 	
-	sst_acspo = sst_pass2.copy()
 	sst_acspo[~mask] = np.nan
 	cdf.close()
 
 	cloud_mask = np.bitwise_and(l2p_flags,-16384).astype(bool)
-	pass2_mask = pass2 == 0
+	#pass2_mask = pass2 == 0
 	sst_acspo[cloud_mask] = np.nan
 	sst_std.append(np.nanstd(sst_acspo - ref_sst))
 
-	sst_pass2[~mask] = np.nan
-	sst_pass2[pass2_mask] = np.nan
-	clear_std.append(np.nanstd(sst_pass2-ref_sst))
+	#sst_pass2[~mask] = np.nan
+	#sst_pass2[pass2_mask] = np.nan
+	#clear_std.append(np.nanstd(sst_pass2-ref_sst))
 
-	clear_pass2.append(np.isfinite(sst_pass2).sum())
+	#clear_pass2.append(np.isfinite(sst_pass2).sum())
 	acspo.append(np.isfinite(sst_acspo).sum())
 	print "finished iteration for " + approx_file
 
@@ -163,6 +180,25 @@ for f1 in collated_files:
 
 	clear_col.append(np.isfinite(col).sum())
 	collated_inds.append(approx_filenames.index(f1.split('/')[2]))
+
+for f1 in collated2_files:
+	cdf = netCDF4.Dataset(f1)
+	col = read_var(cdf,"sea_surface_temperature")
+	col[~mask] = np.nan
+	collated2.append(np.nanstd(col - ref_sst))
+	cdf.close()
+
+	clear_col2.append(np.isfinite(col).sum())
+
+for f1 in scollate_files:
+	cdf = netCDF4.Dataset(f1)
+	col = read_var(cdf,"sea_surface_temperature")
+	col[~mask] = np.nan
+	scollated.append(np.nanstd(col - ref_sst))
+	cdf.close()
+
+	clear_scol.append(np.isfinite(col).sum())
+
 
 """
 smooth_collate_inds = []	
@@ -178,11 +214,14 @@ for f1 in smooth_collate_files:
 """
 
 plt.figure()
-plt.plot(collated_inds,collated, label="collated")
+plt.plot(collated, label="collated")
+plt.plot(collated2, label="collated2")
+plt.plot(scollated, label="scollated")
 #plt.plot(smooth_collate_inds,smooth_collated, label="smooth collated")
 plt.plot(sst_std, label="acspo")
-plt.plot(clear_std, label="clear")
+#plt.plot(clear_std, label="clear")
 plt.plot(approx_std, label="approx")
+plt.plot(approx2_std, label="approx2")
 plt.legend()
 plt.title("Standard Deviation Interpolated Collated")
 plt.show()
@@ -197,11 +236,14 @@ plt.title("Standard Deviation Interpolated Collated")
 plt.show()
 """
 plt.figure()
-plt.plot(collated_inds,clear_col, label="collated")
+plt.plot(clear_col, label="collated")
+plt.plot(clear_col2, label="collated2")
+plt.plot(clear_scol, label="scollated")
 #plt.plot(smooth_collate_inds,clear_smooth, label="smooth collated")
 plt.plot(acspo,label="acspo")
-plt.plot(clear_pass2, label="pass2")
+#plt.plot(clear_pass2, label="pass2")
 plt.plot(clear_approx, label="approx")
+plt.plot(clear_approx2, label="approx2")
 plt.legend()
 plt.title("Number Clear Interpolated Collated")
 plt.show()

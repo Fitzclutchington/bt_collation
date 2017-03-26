@@ -1,21 +1,27 @@
 void
-apply_l2p_flags(const Mat1b &ice_mask,const Mat1b &land_mask,const Mat1b &invalid_mask,Mat1f &bt11_clear, int ind, bool slice)
+apply_l2p_flags(const Mat1b &l2p_mask,Mat1f &bt11_clear, int ind, bool slice)
 {
     int x,y;
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){
-            if(slice){
-                if(ice_mask(y,x,ind)==255 || land_mask(y,x)==255 || invalid_mask(y,x)==255){
+    if(slice){
+        for(y=0;y<HEIGHT;y++){
+            for(x=0;x<WIDTH;x++){
+                if( l2p_mask(y,x)==255 ){
                     bt11_clear(y,x) = NAN;
-                }
-            }
-            else{
-                if(ice_mask(y,x,ind)==255 || land_mask(y,x)==255 || invalid_mask(y,x)==255){
-                    bt11_clear(y,x,ind) = NAN;
                 }
             }
         }
     }
+    
+
+    else{
+        for(y=0;y<HEIGHT;y++){
+            for(x=0;x<WIDTH;x++){
+                if( l2p_mask(y,x)==255 ){
+                    bt11_clear(y,x,ind) = NAN;
+                }
+            }
+        }
+    }    
 }
 
 /*
@@ -40,7 +46,7 @@ compute_diagmask(const Mat1f &samples, Mat1f &clear_samples, int cur_ind)
     //printf("starting diag loop\n");
     for(y=0;y<HEIGHT;y++){
         for(x=0;x<WIDTH;x++){
-            if(!std::isnan(clear_samples(y,x))){
+            if(std::isfinite(clear_samples(y,x))){
     
                 prod = 0;
                 DD=0;
@@ -67,21 +73,6 @@ compute_diagmask(const Mat1f &samples, Mat1f &clear_samples, int cur_ind)
     //SAVENC(diag_mask);
 }
 
-void
-compute_avgmask(const Mat1f &bt11, Mat1f &clear_samples)
-{
-    int y,x,t;
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){
-            if(!std::isnan(clear_samples(y,x))){
-                for(t=0;t<FILTER_TIME_SIZE;t++){
-                    
-                }
-            }
-        }
-    }
-}
-
 /*
 
 Cloud mask determined by the difference of neighboring pixels
@@ -96,7 +87,7 @@ compute_nnmask(const Mat1f &samples,Mat1f &clear_samples, int cur_ind)
     ind_prev = ((cur_ind-1 % FILTER_TIME_SIZE) + FILTER_TIME_SIZE) % FILTER_TIME_SIZE;  
     for(y=0;y<HEIGHT;y++){
         for(x=0;x<WIDTH;x++){
-            if(!std::isnan(clear_samples(y,x))){                
+            if(std::isfinite(clear_samples(y,x))){                
                 D_right = fabs(samples(y,x,cur_ind) - samples(y,x,ind_next));
                 D_left = fabs(samples(y,x,cur_ind) - samples(y,x,ind_prev));
                 if(D_right > T_NN || D_left > T_NN || (std::isnan(D_right) && std::isnan(D_left))){
@@ -142,37 +133,31 @@ compute_threshmask(const Mat1f &samples, Mat1f &samples_clear, int cur_ind,  flo
 
 //posibly make diffs mask instead
 void 
-compute_threshmask_2d(const Mat1f &samples, Mat1f &samples_clear, int cur_ind,  float threshold,bool direction)
+compute_threshmask_2d(const Mat1f &samples, Mat1f &samples_clear,  float threshold,bool direction)
 {
     int x,y;
     float DD;    
     //printf("success at time %d",t);
-    Mat1b ratio_mask(HEIGHT,WIDTH);
-    ratio_mask.setTo(0);
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){               
-            DD = samples(y,x);
-            if(!std::isnan(DD)){
-                if(direction){
-                    if(DD < threshold){
-                        samples_clear(y,x) = NAN;
-                    }
-                    else{
-                        ratio_mask(y,x) = 1;
-                    }
+    if(direction){
+        for(y=0;y<HEIGHT;y++){
+            for(x=0;x<WIDTH;x++){               
+                DD = samples(y,x);
+                if(std::isfinite(DD) && DD < threshold){                    
+                    samples_clear(y,x) = NAN;                                      
                 }
-                else{
-                    if(DD > threshold){
-                        samples_clear(y,x) = NAN;
-                    }
-                    else{
-                        ratio_mask(y,x) = 1;
-                    }
-                }                
             }
         }
     }
-    //SAVENC(ratio_mask);
+    else{
+        for(y=0;y<HEIGHT;y++){
+            for(x=0;x<WIDTH;x++){               
+                DD = samples(y,x);
+                if(std::isfinite(DD) && DD > threshold){
+                    samples_clear(y,x) = NAN;
+                }
+            }                
+        }
+    }
 }
 
 
@@ -209,10 +194,9 @@ compute_cold_mask(const Mat1f &bt08, const Mat1f &bt10, Mat1f &bt11_clear, int c
       }
     }
   }
-  //SAVENC(cold_mask);
 }
 
-
+/*
 void
 filter_histogram(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const Mat1f &bt12, const Mat1f &lats, Mat1f &bt11_clear, int cur_ind)
 {
@@ -262,12 +246,12 @@ filter_histogram(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const 
                     d[1] = l-dlat_L;
                     d[2] = r1-dr1_L;
                     d[3] = r3-dr3_L;
-                    /* withou lat
-                    d[0] = t-dt_L;
-                    d[1] = r1-dr1_L;
-                    d[2] = r2-dr2_L;
-                    d[3] = r3-dr3_L;
-                    */
+                    
+                    //d[0] = t-dt_L;
+                    //d[1] = r1-dr1_L;
+                    //d[2] = r2-dr2_L;
+                    //d[3] = r3-dr3_L;
+                    
                     test(y,x) = H4D(d);
                     if(!(H4D(d))){
                         //printf("passed third if statement\n");
@@ -286,6 +270,7 @@ filter_histogram(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const 
     }
 
 }
+*/
 
 void
 generate_mask(const Mat1f &clear_samples, Mat1b &clear_mask)
@@ -294,7 +279,7 @@ generate_mask(const Mat1f &clear_samples, Mat1b &clear_mask)
     clear_mask.setTo(0);
     for(y=0;y<HEIGHT;y++){
         for(x=0;x<WIDTH;x++){
-            if(!std::isnan(clear_samples(y,x))){
+            if(std::isfinite(clear_samples(y,x))){
                 clear_mask(y,x) = 255;
             }
         }
@@ -349,8 +334,8 @@ void
 apply_mask_2d(const Mat1b &mask, Mat1f &samples)
 {
     int y,x;
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){
+    for(y = 0;y < HEIGHT; ++y){
+        for(x = 0; x < WIDTH; ++x){
             if(mask(y,x) == 0){
                 samples(y,x) = NAN;
             }

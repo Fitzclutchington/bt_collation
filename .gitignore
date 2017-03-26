@@ -1,5 +1,6 @@
 data/
 bt_collation/
+unused_files/
 *.zip
 *.pyc
 *.swp

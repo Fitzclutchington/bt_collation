@@ -187,6 +187,7 @@ convert_int_to_string(int val){
   return str;
 }
 
+/*
 void
 windowed_nanmean_3d(const Mat1f &samples, const Mat1b &land_mask, const Mat1b &invalid_mask, 
                     Mat1f &nanmean, int *window, float threshold)
@@ -273,11 +274,83 @@ windowed_nanmean_3d(const Mat1f &samples, const Mat1b &land_mask, const Mat1b &i
     }
   }
 }
+*/
 
 void
-windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b &land_mask, const Mat1b &invalid_mask, 
+windowed_nanmean_3d(const Mat1f &time_count,const Mat1f &time_sum,const Mat1b &l2p_mask,Mat1f &smooth_output,  const int* window,float threshold)
+{
+
+  int y,x,i,j;
+  int y_dim = window[0];
+  int x_dim = window[1];
+
+  float count,sum,left_sum,left_count;
+  smooth_output.setTo(NAN);
+
+  //calculate stats in time dimension
+  for(y=y_dim;y<HEIGHT-y_dim;y++){
+    x=x_dim;
+    sum = 0;
+    count  = 0;
+    left_sum = 0;
+    left_count = 0;
+    //find first first valid pixel
+    while(l2p_mask(y,x) == 255){
+    // && ice_masks(y,x,t_dim) != 0){
+      x++;
+    }
+    // calc first window sum and count
+
+    for(i=-y_dim;i<y_dim+1;i++){
+      for(j=-x_dim;j<x_dim+1;j++){
+        //if(y+i > HEIGHT || x +j > WIDTH){
+        //  printf("x = %d , y= %d\n", y+i, x+j);
+        //}          
+        count+= time_count(y+i,x+j);
+        sum += time_sum(y+i,x+j);         
+        
+      }
+    }
+
+
+    if(count > threshold && x<WIDTH-x_dim){
+
+      smooth_output(y,x) = sum /count;
+    }
+
+    // now repeat for all other valid x values
+    for(x=x+1;x<WIDTH-x_dim;x++){
+      //remove all values of previous left
+      sum -= left_sum;
+      count -= left_count;
+
+      //calculate new left and new right
+      left_sum = 0;
+      left_count = 0;
+      for(i=-y_dim;i<y_dim+1;i++){  
+        left_count+=time_count(y+i,x-x_dim);
+        left_sum += time_sum(y+i,x-x_dim);  
+        count+= time_count(y+i,x+x_dim);
+        sum += time_sum(y+i,x+x_dim);     
+      }
+
+
+      //printf("count = %f sum = %f\n", count, sum);
+      if(l2p_mask(y,x) == 0){
+        // calculate this pixels value at 3dsmooth(y,x)
+        if(count>threshold){
+          smooth_output(y,x) = sum /count;
+        }
+      }
+    }
+  }
+}
+
+void
+windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b &l2p_mask, 
                           Mat1f &nanmean, int *window, int mid)
 {
+
   Mat1f time_sum(HEIGHT,WIDTH);
   Mat1f time_count(HEIGHT,WIDTH);
 
@@ -295,7 +368,7 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
     for(x=0;x<WIDTH;x++){
       for(t=-t_dim;t<t_dim+1;t++){
         time =(((mid + t) % SECOND_PASS_SIZE + SECOND_PASS_SIZE)%SECOND_PASS_SIZE);
-        if(!std::isnan(samples(y,x,time))){
+        if(std::isfinite(samples(y,x,time))){
           time_sum(y,x) += samples(y,x,time);
           time_count(y,x) += 1;
         }
@@ -303,10 +376,11 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
     }
   }
 
+
   if(y_dim == 0){
     for(y=0;y<HEIGHT;y++){
       for(x=0;x<WIDTH;x++){
-        if(time_count(y,x) > 0){
+        if(time_count(y,x) > 0 ){
           nanmean(y,x) = time_sum(y,x) / time_count(y,x);
         }
       }
@@ -325,9 +399,7 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
     left_sum = 0;
     left_count = 0;
     //find first first valid pixel
-    while(land_mask(y,x) !=0 && invalid_mask(y,x) != 0){
-      x++;
-    }
+
     //printf("first valid x = %d\n",x);
     // calc first window sum and count    
     for(i=-y_dim;i<y_dim+1;i++){
@@ -361,7 +433,7 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
 
 
       //printf("count = %f sum = %f\n", count, sum);
-      if(land_mask(y,x)==0 && invalid_mask(y,x) ==0 && counts(y,x) > 0){
+      if(l2p_mask(y,x) ==0 && counts(y,x) > 0){
         // calculate this pixels value at 3dsmooth(y,x)
         nanmean(y,x) = sum /count;
       }
@@ -388,13 +460,14 @@ void
 compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Mat1f &bt12,
                   const Mat1b border_mask, Mat1f &clear_samples,int cur_ind)
 {
-  int y,x,t,i,j,k;
+  int y,x,i,j,k,t;
   int y_delta = 2;
   int x_delta = 2;
   int t_delta = 2;
 
   int min_num = (2*y_delta +1) *(2*x_delta + 1)*(2*t_delta+1)/2;
-  float bt08_sum,bt10_sum,bt11_sum,bt12_sum,count,mean,window_sum,row_sum, res_mean;
+  int count_dim = 0;
+  float bt08_sum,bt10_sum,bt11_sum,bt12_sum,count,window_sum,row_sum, res_mean;
   float temp_bt08;
   float temp_bt10;
   float temp_bt11;
@@ -462,15 +535,16 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
         // calculate the mean of the norm of the pixels
         // projected into the second eigenvector
         count = valid_bt08.size();
+        count_dim = valid_bt08.size();
         counts(y,x) = count;
-        if(valid_bt08.size() > min_num){
+        if(count > min_num){
           bt08_mean =bt08_sum/count;
           bt10_mean =bt10_sum/count;
           bt11_mean =bt11_sum/count;
           bt12_mean =bt12_sum/count;
 
-          MatrixXf window(valid_bt08.size(),4);
-          for(i=0;i<valid_bt08.size();i++){
+          MatrixXf window(count_dim,4);
+          for(i = 0; i < count; ++i){
             window(i,0) = valid_bt08[i] - bt08_mean;
             window(i,1) = valid_bt10[i] - bt10_mean;
             window(i,2) = valid_bt11[i] - bt11_mean;
@@ -482,7 +556,7 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
           e1/=sqrt(e1.transpose()*e1);
           r = window - (window*e1)*e1.transpose();
           window_sum =0;
-          for(i=0;i<valid_bt08.size();i++){
+          for(i = 0;i < count; ++i){
             row_sum = 0;
             row_sum+=r(i,0)*r(i,0);
             row_sum+=r(i,1)*r(i,1);
@@ -509,16 +583,15 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
 
 
 void
-compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int cur_ind)
+compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples)
 {
-  int y,x,t,i,j,k;
+  int y,x,i,j;
   int y_delta = 2;
   int x_delta = 2;
-  int t_delta = 2;
+  int count_dim = 0;
 
   int min_num = (2*y_delta +1) *(2*x_delta + 1)/2;
-  printf("min num = %d\n",min_num);
-  float t0_sum,t1_sum,t2_sum,t3_sum,t4_sum,count,mean,window_sum,row_sum, res_mean;
+  float t0_sum,t1_sum,t2_sum,t3_sum,t4_sum,count,window_sum,row_sum, res_mean;
   float temp_t0;
   float temp_t1;
   float temp_t2;
@@ -533,7 +606,6 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
   float t4_mean;
 
   Mat1f counts(HEIGHT,WIDTH);
-  //Mat1f vals(HEIGHT,WIDTH);
 
   Mat1b eigen_mask(HEIGHT, WIDTH);
   eigen_mask.setTo(0);
@@ -551,9 +623,9 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
   MatrixXf r;
   MatrixXf A;
 
-  for(y=y_delta;y<HEIGHT-y_delta;y++){
-    for(x=x_delta;x<WIDTH-x_delta;x++){
-      if(!std::isnan(clear_samples(y,x)) && border_mask(y,x) == 0){
+  for(y = y_delta; y < HEIGHT-y_delta; ++y){
+    for(x = x_delta; x < WIDTH-x_delta; ++x){
+      if(std::isfinite(clear_samples(y,x)) && border_mask(y,x) == 0){
     
         // calc first window
         // we know that first left are nans so we don't calculate left inds     
@@ -573,7 +645,7 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
               temp_t4 = bt11(y+i,x+j,4);
 
               // land and invalid pixels have been removed before calling this function
-              if(!std::isnan(temp_t0) && !std::isnan(temp_t1) && !std::isnan(temp_t2) && !std::isnan(temp_t3) && !std::isnan(temp_t4)){
+              if(std::isfinite(temp_t0) && std::isfinite(temp_t1) && std::isfinite(temp_t2) && std::isfinite(temp_t3) && std::isfinite(temp_t4)){
                 valid_t0.push_back(temp_t0);
                 valid_t1.push_back(temp_t1);
                 valid_t2.push_back(temp_t2);
@@ -594,17 +666,18 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
         // calculate the mean of the norm of the pixels
         // projected into the second eigenvector
         count = valid_t0.size();
+        count_dim = valid_t0.size();
         ///printf("count = %f\n",count);
         counts(y,x) = count;
-        if(valid_t0.size() > min_num){
+        if(count > min_num){
           t0_mean =t0_sum/count;
           t1_mean =t1_sum/count;
           t2_mean =t2_sum/count;
           t3_mean =t3_sum/count;
           t4_mean =t4_sum/count;
 
-          MatrixXf window(valid_t0.size(),5);
-          for(i=0;i<valid_t0.size();i++){
+          MatrixXf window(count_dim,5);
+          for(i = 0; i < count; ++i){
             window(i,0) = valid_t0[i] - t0_mean;
             window(i,1) = valid_t1[i] - t1_mean;
             window(i,2) = valid_t2[i] - t2_mean;
@@ -618,7 +691,7 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
           e1/=sqrt(e1.transpose()*e1);
           r = window - (window*e1)*e1.transpose();
           window_sum =0;
-          for(i=0;i<valid_t0.size();i++){
+          for(i = 0; i < count; ++i){
             row_sum = 0;
             row_sum+=r(i,0)*r(i,0);
             row_sum+=r(i,1)*r(i,1);
@@ -630,7 +703,7 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
           }
           
           res_mean = window_sum/(float)valid_t0.size();
-          //vals(y,x) = res_mean;
+
           if(res_mean > T_TL0){
             clear_samples(y,x) = NAN;
           }
@@ -641,16 +714,15 @@ compute_tl0(const Mat1f &bt11, const Mat1b border_mask, Mat1f &clear_samples,int
       }
     }
   }
-  //SAVENC(vals);
 }
 
 void
 calculate_bt_ratio(const Mat1f &bt08, const Mat1f &bt11,const Mat1f &bt12, 
-                   Mat1f &bt_ratio,float ratio,int ind)
+                   Mat1f &bt_ratio,int ind)
 {
   int y,x;
-  for(y=0;y<HEIGHT;y++){
-    for(x=0;x<WIDTH;x++){
+  for(y = 0; y < HEIGHT; ++y){
+    for(x = 0; x < WIDTH; ++x){
       bt_ratio(y,x) = bt08(y,x,ind) + 0.8*bt11(y,x,ind) - (1+0.8)*bt12(y,x,ind);
     }
   }
@@ -660,8 +732,8 @@ string
 generate_filename(const string file_loc)
 {
   string div = "/";
-  int temp_pos = 0;
-  int pos = temp_pos;
+  size_t temp_pos = 0;
+  size_t pos = temp_pos;
   string filename;
   while(temp_pos != string::npos){
     temp_pos = file_loc.find(div,pos+1);
@@ -679,8 +751,8 @@ string
 generate_foldername(const string file_loc)
 {
   string div = "/";
-  int temp_pos = 0;
-  int pos = temp_pos;
+  size_t temp_pos = 0;
+  size_t pos = temp_pos;
   string filename;
   while(temp_pos != string::npos){
     temp_pos = file_loc.find(div,pos+1);
@@ -693,18 +765,32 @@ generate_foldername(const string file_loc)
   return filename;
 }
 
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// remove_high_derivatives:
+//
+// Input:
+// Mat1f smooth - matrix that needs derivatives removed
+// Mat1b l2p_mask - a HEIGHT x WIDTH matrix where 2555 is a land or invalid pixel and 0 is a valid pixel 
+// int time_size - length in time of smooth matrix
+//
+// This function removes neighboring pixels with high derivatives determined by (fabs(first - second) > T_DERIV))
+//
+// Note: the final slice of the matrix is ignored since there is no t+1 pixel to 
+// examine to determine if there is a high derivative
+//
 void
-remove_high_derivatives(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &invalid_mask, int time_size)
+remove_high_derivatives(Mat1f &smooth, const Mat1b &l2p_mask, int time_size)
 {
-  int x,y,i,t,j;
-  bool is_nan;
+  int x,y,t;
+  float first, second;
   for(y=0;y<HEIGHT;y++){
     for(x=0;x<WIDTH;x++){
-      if(invalid_mask(y,x) == 0 && land_mask(y,x) == 0){
-
-        for(t=0;t<time_size;t++){
-          is_nan = std::isnan(smooth(y,x,t));
-          if(std::isnan(smooth(y,x,t)) || (!std::isnan(smooth(y,x,t+1)) && fabs(smooth(y,x,t) - smooth(y,x,t+1)) > T_DERIV) || std::isnan(smooth(y,x,t+1))){ 
+      if(l2p_mask(y,x) == 0){
+        // -1 so that we don't over extend boundary
+        for(t=0;t<time_size-1;t++){
+          first = smooth(y,x,t);
+          second = smooth(y,x,t+1);
+          if(std::isnan(first) || (std::isfinite(second) && (fabs(first - second) > T_DERIV)) || std::isnan(second)){ 
             smooth(y,x,t) = NAN;
           }
         }
@@ -714,13 +800,13 @@ remove_high_derivatives(Mat1f &smooth,  const Mat1b &land_mask, const Mat1b &inv
 }
 
 void
-remove_last_value(Mat1f &collated_interp,const Mat1b &invalid_mask,const Mat1b &land_mask, int time_size)
+remove_last_value(Mat1f &collated_interp, int time_size)
 {
   int y,x,t;
-  for(y=0;y<HEIGHT;y++){
-    for(x=0;x<WIDTH;x++){
-      for(t=0;t<time_size-1;t++){
-        if(!std::isnan(collated_interp(y,x,t)) && std::isnan(collated_interp(y,x,t+1))){
+  for(y = 0; y < HEIGHT; ++y){
+    for(x = 0; x < WIDTH; ++x){
+      for(t = 0; t < time_size-1; ++t){
+        if(std::isfinite(collated_interp(y,x,t)) && std::isnan(collated_interp(y,x,t+1))){
           collated_interp(y,x,t) = NAN;
         }
       }
@@ -729,15 +815,83 @@ remove_last_value(Mat1f &collated_interp,const Mat1b &invalid_mask,const Mat1b &
 }
 
 void
-combine_l2pmasks(const Mat1b &land_mask,const Mat1b &invalid_mask,Mat1b &l2p_mask)
+combine_l2pmasks(const Mat1b &land_mask,const Mat1b &invalid_mask, const Mat1b &ice_mask, Mat1b &l2p_mask)
 {
   int y,x;
   for(y=0;y<HEIGHT;++y){
     for(x=0;x<WIDTH;++x){
       l2p_mask(y,x) = 0;
-      if(land_mask(y,x) == 255 || invalid_mask(y,x) == 255){
+      if(land_mask(y,x) == 255 || invalid_mask(y,x) == 255 || ice_mask(y,x) == 255){
         l2p_mask(y,x) = 255;
       }
     }
   }
+}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// update_sums:
+//
+// Input:
+// Mat1f time_count - matrix of the number of finite values in the window for each pixel
+// Mat1f time_sum - matrix of the sum of finite values in the window for each pixel
+// Mat1f masked_data - matrix that contains all the masked original data
+// int cur_ind - index of the granule that is being processed
+// sting mode - determines finctionallity of function:
+//              "right" - only adds right granule
+//              "left"  - only removes left granule
+//              "both"  - removes left and adds right
+//
+// update time_count and time_sum by adding the right granule value and removing the left granule
+//
+void
+update_sums(Mat1f &time_count,Mat1f &time_sum, const Mat1f &masked_data, int cur_ind, int lag, string mode)
+{
+  
+  int y,x;
+  float val;
+  int left = cur_ind - lag -1;
+  int right = cur_ind + lag;
+
+  if(mode == "right"){
+    for(y = 0; y < HEIGHT; ++y){
+      for(x = 0; x < WIDTH; ++x){
+        val = masked_data(y,x,right);
+        if(std::isfinite(val)){
+          time_count(y,x)++;
+          time_sum(y,x) += val;
+        }
+      }
+    }
+  }
+
+  else if(mode == "left"){
+    for(y = 0; y < HEIGHT; ++y){
+      for(x = 0; x < WIDTH; ++x){
+        val = masked_data(y,x,left);
+        if(std::isfinite(val)){
+          time_count(y,x)--;
+          time_sum(y,x) -= val;
+        }
+      }
+    }
+  }
+
+  else if(mode == "both"){
+    for(y = 0; y < HEIGHT; ++y){
+      for(x = 0; x < WIDTH; ++x){
+        val = masked_data(y,x,left);
+        if(std::isfinite(val)){
+          time_count(y,x)--;
+          time_sum(y,x) -= val;
+        }
+
+        val = masked_data(y,x,right);
+        if(std::isfinite(val)){
+          time_count(y,x)++;
+          time_sum(y,x) += val;
+        }
+      }
+    }
+  }
+
 }

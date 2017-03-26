@@ -214,7 +214,7 @@ get_file_names(const char *pathsfile, vector<string> &paths)
 	f.close();
 
 	if(paths.size() < TIMEINT){
-		eprintf("too few granules\n");
+		eprintf("You must have at least %d granules\n",TIMEINT);
 	}
 	
 }
@@ -230,7 +230,7 @@ get_current_files(const vector<string> &paths, vector<string> &curPaths, int nfi
 }
 
 void
-get_icemask(const string pathsfile, Mat1b &ice_mask, int ind)
+get_icemask(const string pathsfile, Mat1b &ice_mask)
 {
 	int ncid,y,x;
 	int n = nc_open(pathsfile.c_str(), 0, &ncid);
@@ -238,20 +238,20 @@ get_icemask(const string pathsfile, Mat1b &ice_mask, int ind)
 		ncfatal(n, "nc_open failed for %s\n", pathsfile);
 	}
 
-	Mat1s img;
-	int varid = readvar(ncid, "l2p_flags", img);
-	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
-		printf("unpexpected dimensions\n");
+	Mat1b img;
+	readvar(ncid, "acspo_mask", img);
+	if(img.dims != 2 || img.size[0] != HEIGHT || img.size[1] != HEIGHT){
+		eprintf("unpexpected dimensions\n");
 	}
-	if(img.type() != CV_16SC1){
+	if(img.type() != CV_8UC1){
 		eprintf("unpexpected type\n");
 	}
     
-	for(y = 0; y < HEIGHT; y++){
-		for(x = 0; x < WIDTH; x++){
-			ice_mask(y,x,ind) =0;
-			 if(img(0,y,x) & 4){
-			 	ice_mask(y, x, ind) = 255;
+	for(y = 0; y < HEIGHT; ++y){
+		for(x = 0; x < WIDTH; ++x){
+			ice_mask(y,x) = 0;
+			 if(img(y,x) & 32){
+			 	ice_mask(y, x) = 255;
 			 }
 		}
 	}
@@ -271,7 +271,7 @@ open_LUT(const string pathsfile, Mat1b &lut, int *dims)
 	}
 
 	Mat1b img;
-	int varid = readvar(ncid, "LUT", img);
+	readvar(ncid, "LUT", img);
 	if(img.dims != 4 || img.size[0] != dims[0] || img.size[1] != dims[1] || img.size[2] != dims[2] || img.size[3] != dims[3]){
 		printf("unpexpected dimensions\n");
 	}
@@ -309,7 +309,7 @@ read_mask(const string pathsfile, Mat1b &mask, int cur_ind)
 	}
 
 	Mat1b img;
-	int varid = readvar(ncid, "brightness_temperature_11um2", img);
+	readvar(ncid, "brightness_temperature_11um2", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != WIDTH){
 		printf("unpexpected dimensions\n");
 	}
@@ -354,7 +354,7 @@ get_l2pmask(const char *pathsfile, Mat1b &land_mask, Mat1b &invalid_mask)
 	}
 
 	Mat1s img;
-	int varid = readvar(ncid, "l2p_flags", img);
+	readvar(ncid, "l2p_flags", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
 		printf("unpexpected dimensions\n");
 	}
@@ -362,8 +362,8 @@ get_l2pmask(const char *pathsfile, Mat1b &land_mask, Mat1b &invalid_mask)
 		eprintf("unpexpected type\n");
 	}
     
-	for(int y = 0; y < HEIGHT; y++){
-		for(int x = 0; x < WIDTH; x++){
+	for(int y = 0; y < HEIGHT; ++y){
+		for(int x = 0; x < WIDTH; ++x){
 			 if(img(0,y,x) & 2){
 			 	land_mask(y, x) = 255;
 			 }
@@ -373,8 +373,8 @@ get_l2pmask(const char *pathsfile, Mat1b &land_mask, Mat1b &invalid_mask)
 		}
 	}
 
-	for(int y = 0; y < HEIGHT; y++){
-		for(int x = 0; x < WIDTH; x++){
+	for(int y = 0; y < HEIGHT; ++y){
+		for(int x = 0; x < WIDTH; ++x){
 			 if(img(0,y,x) & 256){
 			 	invalid_mask(y, x) = 255;
 			 }
@@ -399,7 +399,7 @@ read_acspo(const string pathsfile, Mat1b &mask, int cur_ind)
 	}
 
 	Mat1s img;
-	int varid = readvar(ncid, "l2p_flags", img);
+	readvar(ncid, "l2p_flags", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
 		printf("unpexpected dimensions\n");
 	}
@@ -452,7 +452,7 @@ read_reference(const string path,Mat1f &data,string variable)
 		
 	Mat img;
 
-	int varid = readvar(ncid, variable.c_str(), img);
+	readvar(ncid, variable.c_str(), img);
 	if(img.dims != 2 || img.size[0] != HEIGHT|| img.size[1] != WIDTH){
 		printf("unpexpected dimensions\n");
 	}
@@ -621,8 +621,8 @@ get_var(const string path, Mat1f &mat, const string variable)
 
 void
 save_test_nc_float(const Mat samples, const char *filename){
-	char* width_name = "nj";
-	char* height_name = "ni";
+	string width_name = "nj";
+	string height_name = "ni";
     std::vector<int> dimid(3);
     
     int ncid;
@@ -636,12 +636,12 @@ save_test_nc_float(const Mat samples, const char *filename){
 		ncfatal(n, "nc_def_dim failed");
 	}
 
-	n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
+	n = nc_def_dim(ncid, height_name.c_str(), HEIGHT, &dimid[1]);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_def_dim failed");
 	}
 
-	n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
+	n = nc_def_dim(ncid, width_name.c_str(), WIDTH, &dimid[2]);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_def_dim failed");
 	}
@@ -681,184 +681,6 @@ save_test_nc_float(const Mat samples, const char *filename){
 }
 
 void
-save_test_nc_final(const Mat1f &bt11_samples, const Mat1f &bt12_samples, const Mat1f &bt08_samples, const Mat1f &bt10_samples,const Mat1f sst_samples, 
-				   const Mat1b &bt08_clear_count,const Mat1b &bt08_approx_count,const Mat1b &bt10_clear_count,const Mat1b &bt10_approx_count,
-				   const Mat1b &bt11_clear_count,const Mat1b &bt11_approx_count,const Mat1b &bt12_clear_count,const Mat1b &bt12_approx_count,
-				   const Mat1b &sst_clear_count,const Mat1b &sst_approx_count,const char* filename)
-{
-	char* width_name = "ni";
-	char* height_name = "nj";
-    std::vector<int> dimid(3);
-    
-    int ncid;
-	int n = nc_create(filename,NC_NETCDF4,&ncid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_create failed");
-	}
-
-	n = nc_def_dim(ncid, "time", 1, &dimid[0]);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_dim failed");
-	}
-
-	n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_dim failed");
-	}
-
-	n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_dim failed");
-	}
-    
-    int varid;
-    n = nc_def_var(ncid, "brightness_temperature_10um4", NC_FLOAT, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_float(ncid, varid, (float*)bt10_samples.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-
-	n = nc_def_var(ncid, "brightness_temperature_08um6", NC_FLOAT, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_float(ncid, varid, (float*)bt08_samples.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-
-	n = nc_def_var(ncid, "brightness_temperature_11um2", NC_FLOAT, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_float(ncid, varid, (float*)bt11_samples.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-	
-	n = nc_def_var(ncid, "brightness_temperature_12um3", NC_FLOAT, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_float(ncid, varid, (float*)bt12_samples.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-
-	n = nc_put_var_float(ncid, varid, (float*)bt11_samples.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-	
-	n = nc_def_var(ncid, "sea_surface_temperature", NC_FLOAT, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_float(ncid, varid, (float*)sst_samples.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-
-	n = nc_def_var(ncid, "num_clear_bt08", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt08_clear_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_int bt08 failed");
-
-	n = nc_def_var(ncid, "num_clear_bt10", NC_BYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt10_clear_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_int bt10 failed");
-
-	n = nc_def_var(ncid, "num_clear_bt11", NC_BYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt11_clear_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_int bt11 failed");
-
-	n = nc_def_var(ncid, "num_clear_bt12", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt12_clear_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_int bt12 failed");
-
-	n = nc_def_var(ncid, "num_clear_sst", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)sst_clear_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_int failed");
-
-	n = nc_def_var(ncid, "num_approx_bt08", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt08_approx_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_fint failed");
-
-	n = nc_def_var(ncid, "num_approx_bt10", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt10_approx_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_fint bt10 failed");
-
-
-	n = nc_def_var(ncid, "num_approx_bt11", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt11_approx_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_fint bt11 failed");
-
-	n = nc_def_var(ncid, "num_approx_bt12", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)bt12_approx_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_uchar bt12 failed");
-
-	n = nc_def_var(ncid, "num_approx_sst", NC_UBYTE, dimid.size(), dimid.data(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_def_var failed");
-	}
-
-	n = nc_put_var_uchar(ncid, varid, (uchar*)sst_approx_count.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_uchar failed");
-
-    n = nc_close(ncid);
-	if(n != NC_NOERR){
-		ncfatal(n, "savenc: closing %s failed", filename);
-	}
-}
-
-void
 readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt10, Mat1f &sst, int ind)
 {
 	// TODO: deal with non-continuous time interval 
@@ -870,7 +692,7 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 		ncfatal(n, "nc_open failed for %s", path.c_str());
 	}
 	
-	Mat img;
+	Mat1s img;
 
 	int varid = readvar(ncid, "brightness_temperature_11um2", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
@@ -894,7 +716,7 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
 			 bt11(y,x,ind) = NAN;
-			 val = img.at<short>(0, y, x)*scale + offset;
+			 val = img(0, y, x)*scale + offset;
 			 if(val > 0){
 			 	bt11(y, x,ind) = val;
 			 }
@@ -921,7 +743,7 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
+			 val = img(0, y, x)*scale + offset;
 			 bt12(y,x,ind) = NAN;
 			 if(val > 0){
 			 	bt12(y, x,ind) = val;
@@ -949,7 +771,7 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
+			 val = img(0, y, x)*scale + offset;
 			 bt08(y,x,ind) = NAN;
 			 if(val > 0){
 			 	bt08(y, x,ind) = val;
@@ -977,7 +799,7 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
+			 val = img(0, y, x)*scale + offset;
 			 bt10(y,x,ind) = NAN;
 			 if(val > 0){
 			 	bt10(y, x,ind) = val;
@@ -1005,7 +827,7 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
+			 val = img(0, y, x)*scale + offset;
 			 sst(y,x,ind) = NAN;
 			 if(val > 0){
 			 	sst(y, x,ind) = val;
@@ -1013,31 +835,6 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 		}
 	}
     
-    /*
-	varid = readvar(ncid, "dt_analysis", img);
-	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
-		printf("unpexpected dimensions\n");
-	}
-	if(img.type() != CV_8SC1){
-		eprintf("unpexpected type\n");
-	}
-	
-	n = nc_get_att_float(ncid, varid, "scale_factor", &scale);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_get_att_float failed");
-	}
-	
-
-	for(int y = 0; y < HEIGHT; y++){
-		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<char>(0, y, x)*scale;
-			 dt_analysis(y,x,ind) = NAN;
-			 if(!std::isnan(val)){
-			 	dt_analysis(y, x,ind) = val;
-			 }
-		}
-	}
-	*/
 	n = nc_close(ncid);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_close failed");
@@ -1414,8 +1211,8 @@ void
 save_test_nc_fullbands(const Mat1f &bt08,const Mat1f & bt10,const Mat1f & bt11, const Mat1f &bt12,
 	                   const Mat1f &sst,const char* filename)
 {
-	char* width_name = "ni";
-	char* height_name = "nj";
+	string width_name = "ni";
+	string height_name = "nj";
     std::vector<int> dimid(3);
     
     int ncid;
@@ -1429,12 +1226,12 @@ save_test_nc_fullbands(const Mat1f &bt08,const Mat1f & bt10,const Mat1f & bt11, 
 		ncfatal(n, "nc_def_dim failed");
 	}
 
-	n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[1]);
+	n = nc_def_dim(ncid, height_name.c_str(), HEIGHT, &dimid[1]);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_def_dim failed");
 	}
 
-	n = nc_def_dim(ncid, width_name, WIDTH, &dimid[2]);
+	n = nc_def_dim(ncid, width_name.c_str(), WIDTH, &dimid[2]);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_def_dim failed");
 	}
@@ -1496,8 +1293,8 @@ save_and_update(const string filename, const Mat1f &samples,string variable, boo
 {
 	//mode true- create file
 	//mode false - append to file
-	char* width_name = "nj";
-	char* height_name = "ni";
+	string width_name = "nj";
+	string height_name = "ni";
     std::vector<int> dimid(3);
     
     int ncid,n, varid;
@@ -1512,12 +1309,12 @@ save_and_update(const string filename, const Mat1f &samples,string variable, boo
 			ncfatal(n, "nc_def_dim failed");
 		}
 
-		n = nc_def_dim(ncid, width_name, WIDTH, &dimid[1]);
+		n = nc_def_dim(ncid, width_name.c_str(), WIDTH, &dimid[1]);
 		if(n != NC_NOERR){
 			ncfatal(n, "nc_def_dim failed");
 		}
 
-		n = nc_def_dim(ncid, height_name, HEIGHT, &dimid[2]);
+		n = nc_def_dim(ncid, height_name.c_str(), HEIGHT, &dimid[2]);
 		if(n != NC_NOERR){
 			ncfatal(n, "nc_def_dim failed");
 		}

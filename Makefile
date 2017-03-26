@@ -1,6 +1,6 @@
 PROG = ahil2c
 CXX = g++
-CXXFLAGS = -g -Wall -Wpedantic -Wunused-parameter -march=native -O2 -fopenmp -std=c++11 
+CXXFLAGS = -g -Wall -Wpedantic -Wfatal-errors -Wunused-parameter -march=native -O2 -fopenmp -std=c++11 
 LD = g++
 LDFLAGS =\
 	-fopenmp\
