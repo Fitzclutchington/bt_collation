@@ -85,20 +85,28 @@ main(int argc, char *argv[])
     /*
     //for debugging purposes
     int i;
-    for(i =0;i<201;i++){
+    for(i =0;i<203;i++){
         filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG]);
         clearpath = "data/clear" + filename;
         clear_paths.push_back(clearpath.c_str());
     }
     
     
-    for(i=0;i<177;i++){
+    for(i=0;i<179;i++){
         filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG+SECOND_PASS_LAG]);
         clearpath = "data/pass2" + filename;
         second_pass_paths.push_back(clearpath.c_str());
     }
-    */
 
+    for(i =0;i<179;i++){
+        filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG+SECOND_PASS_LAG]);
+        smoothpath = "data/smooth" + filename;
+        smooth_paths.push_back(smoothpath.c_str());
+    }
+    
+
+    */
+    
     
     printf("starting cloud filter\n");
 
@@ -113,38 +121,16 @@ main(int argc, char *argv[])
     printf("starting second pass\n");
 
     second_pass(clear_paths, original_paths, second_pass_paths, l2p_mask);
-
+    
 
     printf("finished second pass\n");
-
+    
+    
     printf("starting smoothing operation\n");
     smooth_samples(second_pass_paths, original_paths, l2p_mask, smooth_paths, reference_file, window, false);
     int smooth_size = smooth_paths.size();
     printf("Smoothing completed for %d granules\n",smooth_size);
     
-    /*
-    for(i =0;i<177;i++){
-        filename = generate_filename(original_paths[i+FILTER_WINDOW_LAG+SECOND_PASS_LAG]);
-        smoothpath = "data/smooth_test" + filename;
-        smooth_paths.push_back(smoothpath.c_str());
-    }
-    */
-    
-    /*
-    printf("starting smoothing operation\n");
-    smooth_samples(second_pass_paths, original_paths, land_mask, invalid_mask, smooth_paths, reference_file, window);
-    printf("Smoothing completed for %d granules\n",smooth_paths.size());
-    */
-    
-    
-    /*
-    for(i =0;i<179;i++){
-        filename = generate_filename(smooth_paths[i]);
-        approxpath = "data/approx" + filename;
-        approx_paths.push_back(approxpath.c_str());
-    }  
-    */
-
     
     
     //approx_clear(smooth_paths,second_pass_paths, original_paths,land_mask, invalid_mask, approx_paths,reference_file,interp);

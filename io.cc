@@ -235,7 +235,7 @@ get_icemask(const string pathsfile, Mat1b &ice_mask)
 	int ncid,y,x;
 	int n = nc_open(pathsfile.c_str(), 0, &ncid);
 	if(n != NC_NOERR){
-		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+		ncfatal(n, "nc_open failed for %s\n", pathsfile.c_str());
 	}
 
 	Mat1b img;
@@ -267,7 +267,7 @@ open_LUT(const string pathsfile, Mat1b &lut, int *dims)
 	int ncid, i,j,k,l;
 	int n = nc_open(pathsfile.c_str(), 0, &ncid);
 	if(n != NC_NOERR){
-		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+		ncfatal(n, "nc_open failed for %s\n", pathsfile.c_str());
 	}
 
 	Mat1b img;
@@ -305,7 +305,7 @@ read_mask(const string pathsfile, Mat1b &mask, int cur_ind)
 	int ncid, y,x;
 	int n = nc_open(pathsfile.c_str(), 0, &ncid);
 	if(n != NC_NOERR){
-		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+		ncfatal(n, "nc_open failed for %s\n", pathsfile.c_str());
 	}
 
 	Mat1b img;
@@ -395,7 +395,7 @@ read_acspo(const string pathsfile, Mat1b &mask, int cur_ind)
 	int ncid, y,x;
 	int n = nc_open(pathsfile.c_str(), 0, &ncid);
 	if(n != NC_NOERR){
-		ncfatal(n, "nc_open failed for %s\n", pathsfile);
+		ncfatal(n, "nc_open failed for %s\n", pathsfile.c_str());
 	}
 
 	Mat1s img;
@@ -1330,7 +1330,7 @@ save_and_update(const string filename, const Mat1f &samples,string variable, boo
 
 	    n = nc_close(ncid);
 		if(n != NC_NOERR){
-			ncfatal(n, "savenc: closing %s failed", filename);
+			ncfatal(n, "savenc: closing %s failed", filename.c_str());
 		}
 	}
 	else{
@@ -1351,38 +1351,13 @@ save_and_update(const string filename, const Mat1f &samples,string variable, boo
 
 	    n = nc_close(ncid);
 		if(n != NC_NOERR){
-			ncfatal(n, "savenc: closing %s failed", filename);
+			ncfatal(n, "savenc: closing %s failed", filename.c_str());
 		}
 	}
 
 
 }
 
-void
-update_variable(const string filename, Mat1f &data,string variable)
-{
-	int n, varid, ncid;
-
-	n = nc_open(filename.c_str(), NC_WRITE, &ncid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_open failed for %s", filename.c_str());
-	}
-
-	n = nc_inq_varid(ncid, variable.c_str(), &varid);
-	if(n != NC_NOERR){
-		ncfatal(n, "nc_inq_varid failed for variable %s", variable);
-	}
-	
-	n = nc_put_var_float(ncid, varid, (float*)data.data);
-	if(n != NC_NOERR)
-		ncfatal(n, "nc_put_var_float failed");
-
-    n = nc_close(ncid);
-	if(n != NC_NOERR){
-		ncfatal(n, "savenc: closing %s failed", filename.c_str());
-	}
-
-}
 
 void
 save_mat(vector<string> paths, Mat1f &samples, string variable,bool create)
@@ -1405,3 +1380,4 @@ save_mat(vector<string> paths, Mat1f &samples, string variable,bool create)
 
     }
 }
+

@@ -24,43 +24,43 @@ smooth_samples(const vector<string> clear_paths, const vector<string> original_p
     int sample_size = clear_paths.size(); // number of clear files
     int original_lag = FILTER_WINDOW_LAG+SECOND_PASS_LAG; // lag to match original files to mask
     int time_lag = window[2];
-    int dims[3] = {HEIGHT,WIDTH,sample_size}; // dimensions of array containing masked data
+    int dims[3] = {HEIGHT, WIDTH, sample_size}; // dimensions of array containing masked data
     string folder_loc = "data/smooth"; // folder to save output files
     string filename, save_loc;
 
 
-    Mat1b clear_mask(HEIGHT,WIDTH); 
+    Mat1b clear_mask(HEIGHT, WIDTH); 
     
     Mat1f masked_data(3,dims);
     Mat1f smooth_output(HEIGHT, WIDTH); // matrix of smooth vals to save to file
-    Mat1f reference(HEIGHT,WIDTH);
+    Mat1f reference(HEIGHT, WIDTH);
 
-    Mat1f time_sum(HEIGHT,WIDTH);
+    Mat1f time_sum(HEIGHT, WIDTH);
     time_sum.setTo(0);
     
-    Mat1f time_count(HEIGHT,WIDTH);
+    Mat1f time_count(HEIGHT, WIDTH);
     time_count.setTo(0);
     
-    Mat1f left_time_sum(HEIGHT,WIDTH);
-    Mat1f left_time_count(HEIGHT,WIDTH);
+    Mat1f left_time_sum(HEIGHT, WIDTH);
+    Mat1f left_time_count(HEIGHT, WIDTH);
     // get the reference data
-    get_var(ref_file,reference,"sst_reynolds");
+    get_var(ref_file, reference, "sst_reynolds");
 
     // always compute on sst
     // open sst and apply mask
     for(i = 0; i < sample_size; ++i){
 
         //open mask file
-        read_mask(clear_paths[i],clear_mask,-1);
+        read_mask(clear_paths[i], clear_mask, -1);
         //open original data file and place into buffer
-        readgranule_oneband(original_paths[i+original_lag],masked_data,i,"sea_surface_temperature");
+        readgranule_oneband(original_paths[i+original_lag], masked_data, i, "sea_surface_temperature");
         //apply mask to current buffer slice
-        apply_mask_slice(clear_mask,masked_data,i,false);
+        apply_mask_slice(clear_mask, masked_data, i, false);
 
         //subtract reference from granule
-        for(y=0;y<HEIGHT;y++){
-            for(x=0;x<WIDTH;x++){
-                masked_data(y,x,i) = masked_data(y,x,i) - reference(y,x);
+        for(y = 0; y < HEIGHT; ++y){
+            for(x = 0; x < WIDTH; ++x){
+                masked_data(y, x, i) = masked_data(y, x, i) - reference(y, x);
             }
         }
 
@@ -68,7 +68,7 @@ smooth_samples(const vector<string> clear_paths, const vector<string> original_p
         filename = generate_filename(clear_paths[i]);
         smooth_paths.push_back(folder_loc+filename);
         //printf("%s\n",smooth_paths[i].c_str());
-        printf("read file %s\n",original_paths[i+original_lag].c_str());
+        printf("read file %s\n", original_paths[i+original_lag].c_str());
     }
 
 
@@ -76,10 +76,10 @@ smooth_samples(const vector<string> clear_paths, const vector<string> original_p
     for(t = 0; t < SMOOTH_WINDOW_LAG + 1; ++t){
         for(y = 0; y < HEIGHT; ++y){
             for(x = 0; x < WIDTH; ++x){
-                val = masked_data(y,x,t);
+                val = masked_data(y, x, t);
                 if(std::isfinite(val)){
-                    time_count(y,x)++;
-                    time_sum(y,x) += val;
+                    time_count(y, x)++;
+                    time_sum(y, x) += val;
                 }
             }
         }
@@ -229,6 +229,10 @@ smooth_samples(const vector<string> clear_paths, const vector<string> original_p
             }       
         }    
     }
+    time_count.release();
+    time_sum.release();
+    masked_data.release();
+    smooth_output.release();
 }
 
 void

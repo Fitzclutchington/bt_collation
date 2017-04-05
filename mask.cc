@@ -81,22 +81,21 @@ Cloud mask determined by the difference of neighboring pixels
 void 
 compute_nnmask(const Mat1f &samples,Mat1f &clear_samples, int cur_ind)
 {
-    int x,y, ind_next, ind_prev;
+    int x, y, ind_next, ind_prev;
     float D_right, D_left;  
-    ind_next = (cur_ind+1) % FILTER_TIME_SIZE; 
-    ind_prev = ((cur_ind-1 % FILTER_TIME_SIZE) + FILTER_TIME_SIZE) % FILTER_TIME_SIZE;  
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){
-            if(std::isfinite(clear_samples(y,x))){                
-                D_right = fabs(samples(y,x,cur_ind) - samples(y,x,ind_next));
-                D_left = fabs(samples(y,x,cur_ind) - samples(y,x,ind_prev));
+    ind_next = ( cur_ind + 1) % FILTER_TIME_SIZE; 
+    ind_prev = (( cur_ind - 1 % FILTER_TIME_SIZE) + FILTER_TIME_SIZE) % FILTER_TIME_SIZE;  
+    for(y = 0; y < HEIGHT; ++y){
+        for(x = 0; x < WIDTH; ++x){
+            if(std::isfinite(clear_samples(y, x))){                
+                D_right = fabs(samples(y, x, cur_ind) - samples(y, x, ind_next));
+                D_left = fabs(samples(y, x, cur_ind) - samples(y, x, ind_prev));
                 if(D_right > T_NN || D_left > T_NN || (std::isnan(D_right) && std::isnan(D_left))){
-                    clear_samples(y,x) = NAN;
+                    clear_samples(y, x) = NAN;
                 }
             }
         }
     }
-    //SAVENC(nn_mask);
 }
 
 /*
@@ -130,6 +129,34 @@ compute_threshmask(const Mat1f &samples, Mat1f &samples_clear, int cur_ind,  flo
     }
 }
 
+//posibly make diffs mask instead
+void 
+compute_threshmask_2d_single(Mat1f &samples, float threshold,bool direction)
+{
+    int x,y;
+    float DD;    
+    //printf("success at time %d",t);
+    if(direction){
+        for(y=0;y<HEIGHT; ++y){
+            for(x=0;x<WIDTH; ++x){               
+                DD = samples(y,x);
+                if(std::isfinite(DD) && DD < threshold){                    
+                    samples(y,x) = NAN;                                      
+                }
+            }
+        }
+    }
+    else{
+        for(y = 0;y < HEIGHT; ++y){
+            for(x = 0; x < WIDTH; ++x){               
+                DD = samples(y,x);
+                if(std::isfinite(DD) && DD > threshold){
+                    samples(y,x) = NAN;
+                }
+            }                
+        }
+    }
+}
 
 //posibly make diffs mask instead
 void 
@@ -162,35 +189,20 @@ compute_threshmask_2d(const Mat1f &samples, Mat1f &samples_clear,  float thresho
 
 
 void
-compute_btz_mask(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const Mat1f &bt12, float *btweights, Mat1f &bt11_clear, int cur_ind)
-{
-  int x,y;
-  float btz;
-  for(y=0;y<HEIGHT;y++){
-    for(x=0;x<WIDTH;x++){
-      btz = btweights[0]*bt08(y,x,cur_ind) + btweights[1]*bt10(y,x,cur_ind)+ btweights[2]*bt11(y,x,cur_ind) + btweights[3]*bt12(y,x,cur_ind);
-      if(btz>T_BTZ){
-        bt11_clear(y,x) = NAN;
-      }
-    }
-  }
-}
-
-void
-compute_cold_mask(const Mat1f &bt08, const Mat1f &bt10, Mat1f &bt11_clear, int cur_ind)
+compute_cold_mask(const Mat1f &bt08, const Mat1f &bt10, Mat1f &bt11_clear, const int cur_ind)
 {
   int x,y;
   float cold;
-  Mat1b cold_mask(HEIGHT,WIDTH);
+  Mat1b cold_mask(HEIGHT, WIDTH);
   cold_mask.setTo(0);
-  for(y=0;y<HEIGHT;y++){
-    for(x=0;x<WIDTH;x++){
-      cold = (100*(bt10(y,x,cur_ind) - bt08(y,x,cur_ind)))/((bt10(y,x,cur_ind) + bt08(y,x,cur_ind)));
-      if(cold<T_COLD){
-        bt11_clear(y,x) = NAN;
+  for(y = 0; y < HEIGHT; ++y){
+    for(x = 0; x < WIDTH; ++x){
+      cold = (100*(bt10(y, x, cur_ind) - bt08(y, x, cur_ind)))/((bt10(y, x, cur_ind) + bt08(y, x, cur_ind)));
+      if(cold < T_COLD){
+        bt11_clear(y, x) = NAN;
       }
       else{
-        cold_mask(y,x) = 1;
+        cold_mask(y, x) = 1;
       }
     }
   }
@@ -277,10 +289,10 @@ generate_mask(const Mat1f &clear_samples, Mat1b &clear_mask)
 {
     int y,x;
     clear_mask.setTo(0);
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){
-            if(std::isfinite(clear_samples(y,x))){
-                clear_mask(y,x) = 255;
+    for(y = 0; y < HEIGHT; ++y){
+        for(x = 0; x < WIDTH; ++x){
+            if(std::isfinite(clear_samples(y, x))){
+                clear_mask(y, x) = 255;
             }
         }
     }
@@ -344,7 +356,7 @@ apply_mask_2d(const Mat1b &mask, Mat1f &samples)
 }
 
 void
-compute_dtmask(const Mat1f &reference,const Mat1f &samples,Mat1f &samples_clear,int cur_ind,float threshold)
+compute_dtmask(const Mat1f &reference,const Mat1f &samples,Mat1f &samples_clear,int cur_ind)
 {
     int x,y;
     float DD;    
@@ -354,7 +366,7 @@ compute_dtmask(const Mat1f &reference,const Mat1f &samples,Mat1f &samples_clear,
 
             DD = samples(y,x,cur_ind) - reference(y,x);    
        
-            if(DD < threshold){
+            if(DD < T_COLD_DT || DD > T_WARM_DT){
                 samples_clear(y,x) = NAN;
             }            
         }

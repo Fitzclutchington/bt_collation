@@ -7,30 +7,32 @@ generate_masks(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const Ma
 {
 
     int x,y;
-    Mat1f bt11_clear(HEIGHT,WIDTH);
-    Mat1f bt_ratio(HEIGHT,WIDTH);
+    Mat1f bt11_clear(HEIGHT, WIDTH);
+    Mat1f bt_ratio(HEIGHT, WIDTH);
     
     //first copy bt11[:,:,ind] into bt11_clear[:,:,ind]
-    for(y=0;y<HEIGHT;y++){
-        for(x=0;x<WIDTH;x++){
-            bt11_clear(y,x) = sst(y,x,cur_position);          
+    for(y = 0; y < HEIGHT; ++y){
+        for(x = 0; x < WIDTH; ++x){
+            bt11_clear(y, x) = sst(y, x, cur_position);          
         }
     }
 
-    compute_dtmask(reference,sst,bt11_clear,cur_position, T_DT);
+    compute_threshmask_2d_single(bt11_clear, MIN_TEMP, true);
+
+    compute_dtmask(reference, sst, bt11_clear, cur_position);
     printf("finished dt dt_analysis\n");
 
     calculate_bt_ratio(bt08, bt11,bt12, bt_ratio, cur_position);
-    compute_threshmask_2d(bt_ratio, bt11_clear,T_RATIO,true);    
-    printf("finished 2 bt mask\n");
+    compute_threshmask_2d(bt_ratio, bt11_clear, T_RATIO, true);    
+    printf("finished 3 bt mask\n");
 
-    compute_nnmask(bt11, bt11_clear,cur_position);
+    compute_nnmask(bt11, bt11_clear, cur_position);
     printf("finished nnmask\n");  
     
-    compute_cold_mask(bt08,bt10,bt11_clear,cur_position);
+    compute_cold_mask(bt08, bt10, bt11_clear, cur_position);
     printf("finished 2 bt Mask\n"); 
 
-    compute_diagmask(bt11, bt11_clear,cur_position);
+    compute_diagmask(bt11, bt11_clear, cur_position);
     printf("finished diagmask\n");
     
     compute_tl0(sst, border_mask, bt11_clear);

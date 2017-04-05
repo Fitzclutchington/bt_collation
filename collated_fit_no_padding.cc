@@ -1,15 +1,21 @@
 void
-calc_approximate(const Mat1f &bt11_smooth, const Mat1f &bt11_clear, const Mat1b &l2p_mask, Mat1f &bt11_approx, int time_size)
+calc_approximate(const Mat1f &bt11_smooth, const Mat1f &bt11_clear, const Mat1b &l2p_mask, Mat1f &bt11_approx, const string ref_file, int time_size)
 {
     int x,y,z;
     double d1,d2,coeff;
     //placeholder
     int count=0;
+    float val =0;
     vector<float> data_cl2;
     vector<float> smooth;
     vector<int> clear_inds;
+
+    Mat1f reference(HEIGHT,WIDTH);
+
     //Mat1f diffs(HEIGHT,WIDTH);
     bt11_approx.setTo(NAN);
+    get_var(ref_file,reference,"sst_reynolds");
+
     for(y = 0; y < HEIGHT; ++y){
         for(x = 0; x < WIDTH; ++x){
             if(l2p_mask(y,x) == 0 ){
@@ -21,7 +27,6 @@ calc_approximate(const Mat1f &bt11_smooth, const Mat1f &bt11_clear, const Mat1b 
                 for(z = 0; z < time_size; ++z){
                     
                     if(!std::isnan(bt11_smooth(y,x,z)) && !std::isnan(bt11_clear(y,x,z))){
-                        //if(!std::isnan(bt11_clear(y,x,z)) || (fabs(bt11_smooth(y,x,z) - sst(y,x,z))< T_SST_SMOOTH)){
 
                         d1 += bt11_clear(y,x,z)*bt11_smooth(y,x,z);
                         d2 += bt11_smooth(y,x,z)*bt11_smooth(y,x,z);
@@ -34,12 +39,17 @@ calc_approximate(const Mat1f &bt11_smooth, const Mat1f &bt11_clear, const Mat1b 
                 if(d2 != 0 && count > MIN_POINTS){
                     coeff = d1/d2;
                     for(z = 0; z < time_size; ++z){
-                        bt11_approx(y,x,z)= coeff * bt11_smooth(y,x,z);
+                        val = coeff * bt11_smooth(y,x,z);
+                        if((val-reference(y,x)) > T_COLD_DT && (val - reference(y,x)) < T_WARM_DT){
+                            bt11_approx(y,x,z) = val;
+                        }
+
                     }
                 }
             }
         }
     }
+    reference.release();
 }
 
 void
@@ -421,34 +431,28 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     Mat1f clear_samples(3,dims_interpolated);
     Mat1f approx(3,dims_interpolated);
 
-    start = std::chrono::system_clock::now();
+
     for(j = 0; j < collated_interp_size; ++j){
         read_mask(clear_paths[j+collated_inds[0]],clear_masks,-1);
         readgranule_oneband(original_paths[j+original_lag+collated_inds[0]],clear_samples,j,"sea_surface_temperature");
         apply_mask_slice(clear_masks,clear_samples,j,false);
         printf("read file1 %s\n",original_paths[j+original_lag+collated_inds[0]].c_str());
     }
-    end = std::chrono::system_clock::now();
-    elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "time to open clear files = " << elapsed.count() << '\n';
 
-    start = std::chrono::system_clock::now();
+
+
     printf("calculating interp clear\n");
 
     interpolate_hermite(clear_samples, l2p_mask, collated_interp_size, T_INTERP, 2*INTERP_DIST, false);
 
-    end = std::chrono::system_clock::now();
-    elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "time to open interpolate clear = " << elapsed.count() << '\n';
 
-    start = std::chrono::system_clock::now();
+
+
     printf("calculating approximation for sea_surface_temperature\n");
-    calc_approximate(collated_interp,clear_samples, l2p_mask, approx, collated_interp_size);
+    calc_approximate(collated_interp,clear_samples, l2p_mask, approx, ref_file, collated_interp_size);
     printf("finished approximation for sea_surface_temperature\n");
-    //save_mat(approx1_paths, approx, "sea_surface_temperature",true);
-    end = std::chrono::system_clock::now();
-    elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "time to open finish approx 1 = " << elapsed.count() << '\n';
+    save_mat(approx1_paths, approx, "sea_surface_temperature",true);
+
 
     start = std::chrono::system_clock::now();
     // interp inds are now the location of the hour in for the clear samples and approx matrices
@@ -473,37 +477,40 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     printf("starting interpolation of collated values\n");
     interpolate_hermite(collated_interp,l2p_mask,collated_interp_size,T_INTERP,2*INTERP_DIST,false);
     //remove_last_value(collated_interp,invalid_mask,land_mask,collated_interp_size);
-
+    remove_last_value(collated_interp,collated_interp_size);
+    
     end = std::chrono::system_clock::now();
     elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
     std::cout << "time to finish first collation = " << elapsed.count() << '\n';
 
     printf("finished collated interpolation\n");
-    //save_mat(collated1_paths, collated_interp, "sea_surface_temperature",true);
+    save_mat(collated1_paths, collated_interp, "sea_surface_temperature",true);
     
     /////////////////////////////////////////
     // SMOOTH INTERPOLATED COLLATED VALUES //
     /////////////////////////////////////////
     
-    int collated_smooth_lag = 3;    
-    int window[3] = {5,5,collated_smooth_lag};
-
+   
+    int window[3] = {5, 5, COLLATED_SMOOTH_LAG};
     Mat1f collated_smooth(3,dims_interpolated);
+    dims_interpolated[2]--; // account for removal of high derivative
     Mat1f reinstated_clear(3,dims_interpolated);
     Mat1f original_sst(HEIGHT,WIDTH);
-    float DD;
+    Mat1f reference(HEIGHT, WIDTH);
+    float DD, D_ref;
     string full_path;
+    
+    get_var(ref_file,reference,"sst_reynolds");
 
-    start = std::chrono::system_clock::now();
     printf("starting smoothing of collated values\n");
     smooth_samples_collated(collated_interp, collated_smooth,l2p_mask, ref_file, window, collated_interp_size);
     printf("finished smoothing of collated values\n");
-    //save_mat(smooth2_paths, collated_smooth, "sea_surface_temperature",true);
+    save_mat(smooth2_paths, collated_smooth, "sea_surface_temperature",true);
     
-    end = std::chrono::system_clock::now();
-    elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "time to finish smooth collated = " << elapsed.count() << '\n';
 
+
+    remove_high_derivatives(collated_smooth, l2p_mask, collated_interp_size);
+    collated_interp_size--;
     /////////////////////////////////////////////////
     // REINSTATE CLEAR WHERE ORIGINAL SST > SMOOTH //
     /////////////////////////////////////////////////
@@ -511,7 +518,6 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     //get folder where original files are located
     Mat1f clear_sst(HEIGHT,WIDTH);
 
-    start = std::chrono::system_clock::now();
     for(i = 0; i < collated_interp_size; ++i){        
         get_var(original_paths[i+original_lag+collated_inds[0]], original_sst, "sea_surface_temperature");
         for(y = 0; y < HEIGHT; ++y){
@@ -525,20 +531,21 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
         for(y = 0; y < HEIGHT; ++y){
             for(x = 0; x < WIDTH; ++x){
                 reinstated_clear(y,x,i) = clear_sst(y,x);
-                DD = collated_smooth(y,x,i) - original_sst(y,x);
-                if(std::isfinite(DD) && DD < T_SMOOTH_COLLATED){
+                DD = fabs(collated_smooth(y,x,i) - original_sst(y,x));
+                D_ref = original_sst(y,x) - reference(y,x); 
+                if(std::isfinite(DD) && DD < T_SMOOTH_COLLATED && D_ref > T_COLD_DT && D_ref < T_WARM_DT && original_sst(y,x) > MIN_TEMP){
                     reinstated_clear(y,x,i) = original_sst(y,x);
                 }
             }
         }
     }
-    end = std::chrono::system_clock::now();
-    elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "time to finish smooth collated = " << elapsed.count() << '\n';
+
 
     clear_sst.release();
     original_sst.release();
     clear_masks.release();
+
+
     save_mat(reinstated_paths, reinstated_clear, "sea_surface_temperature",true);
 
     ///////////////////////////////////////////////
@@ -550,13 +557,10 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     //approximate using new clear and smooth collated
     //collate one last time
     
-    start = std::chrono::system_clock::now();
+
     approx.create(3,dims_interpolated);
     printf("calculating approximation for sea_surface_temperature\n");
-    calc_approximate(collated_smooth,reinstated_clear, l2p_mask, approx, collated_interp_size);
-    end = std::chrono::system_clock::now();
-    elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
-    std::cout << "time to finish approx2 = " << elapsed.count() << '\n';
+    calc_approximate(collated_smooth,reinstated_clear, l2p_mask, approx, ref_file, collated_interp_size);
 
     printf("finished approximation for sea_surface_temperature\n");
     //Mat1f collated_approx(3,dims);
@@ -568,10 +572,11 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     printf("Starting Collation on sea_surface_temperature\n");
     collate_samples(reinstated_clear, approx, collated, Gamma, interp_inds,l2p_mask,collated_interp_size, ref_file);
     printf("Finished Collation on sea_surface_temperature\n");
-    reinstated_clear.release();approx.release();
+    approx.release();
 
+    remove_long_interpolation(reinstated_clear, collated, interp_inds, collated_interp_size);
+    reinstated_clear.release();
     
-
 
     collated_interp.setTo(NAN);
     for(i = 0; i < collated_size; ++i){

@@ -364,13 +364,13 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
 
   float count,sum,left_sum,left_count;
 
-  for(y=0;y<HEIGHT;y++){
-    for(x=0;x<WIDTH;x++){
-      for(t=-t_dim;t<t_dim+1;t++){
-        time =(((mid + t) % SECOND_PASS_SIZE + SECOND_PASS_SIZE)%SECOND_PASS_SIZE);
-        if(std::isfinite(samples(y,x,time))){
-          time_sum(y,x) += samples(y,x,time);
-          time_count(y,x) += 1;
+  for(y = 0; y < HEIGHT; ++y){
+    for(x = 0; x < WIDTH; ++x){
+      for(t = -t_dim; t < t_dim + 1; ++t){
+        time =(((mid + t) % SECOND_PASS_SIZE + SECOND_PASS_SIZE) % SECOND_PASS_SIZE);
+        if(std::isfinite(samples(y, x, time))){
+          time_sum(y, x) += samples(y, x, time);
+          time_count(y, x) += 1;
         }
       }
     }
@@ -378,10 +378,10 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
 
 
   if(y_dim == 0){
-    for(y=0;y<HEIGHT;y++){
-      for(x=0;x<WIDTH;x++){
-        if(time_count(y,x) > 0 ){
-          nanmean(y,x) = time_sum(y,x) / time_count(y,x);
+    for(y = 0; y < HEIGHT; ++y){
+      for(x = 0; x < WIDTH; ++x){
+        if(time_count(y, x) > 0 ){
+          nanmean(y, x) = time_sum(y, x) / time_count(y, x);
         }
       }
     }
@@ -392,7 +392,7 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
 
   printf("finished nan sum of time\n");
   //calculate stats in time dimension
-  for(y=y_dim;y<HEIGHT-y_dim;y++){
+  for(y = y_dim; y < HEIGHT - y_dim; ++y){
     x=x_dim;
     sum = 0;
     count  = 0;
@@ -402,21 +402,21 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
 
     //printf("first valid x = %d\n",x);
     // calc first window sum and count    
-    for(i=-y_dim;i<y_dim+1;i++){
-      for(j=-x_dim;j<x_dim+1;j++){          
-        count+= time_count(y+i,x+j);
-        sum += time_sum(y+i,x+j);         
+    for(i = -y_dim; i < y_dim + 1; ++i){
+      for(j = -x_dim; j < x_dim + 1; ++j){          
+        count+= time_count(y+i, x+j);
+        sum += time_sum(y+i, x+j);         
         
       }
     }
 
-    if(counts(y,x) >0){
-      nanmean(y,x) = sum /count;
+    if(counts(y, x) >0){
+      nanmean(y, x) = sum /count;
     }
     
 
     // now repeat for all other valid x values
-    for(x=x+1;x<WIDTH;x++){
+    for(x = x+1; x < WIDTH; ++x){
       //remove all values of previous left
       sum -= left_sum;
       count -= left_count;
@@ -424,7 +424,7 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
       //calculate new left and new right
       left_sum = 0;
       left_count = 0;
-      for(i=-y_dim;i<y_dim+1;i++){
+      for(i = -y_dim; i < y_dim + 1; ++i){
         left_count+=time_count(y+i,x-x_dim);
         left_sum += time_sum(y+i,x-x_dim);  
         count+= time_count(y+i,x+x_dim+1);
@@ -433,9 +433,9 @@ windowed_nanmean_2nd_pass(const Mat1f &samples, const Mat1f &counts, const Mat1b
 
 
       //printf("count = %f sum = %f\n", count, sum);
-      if(l2p_mask(y,x) ==0 && counts(y,x) > 0){
+      if(l2p_mask(y, x) ==0 && counts(y, x) > 0){
         // calculate this pixels value at 3dsmooth(y,x)
-        nanmean(y,x) = sum /count;
+        nanmean(y, x) = sum /count;
       }
     }
   }
@@ -890,6 +890,50 @@ update_sums(Mat1f &time_count,Mat1f &time_sum, const Mat1f &masked_data, int cur
           time_count(y,x)++;
           time_sum(y,x) += val;
         }
+      }
+    }
+  }
+
+}
+
+void
+remove_long_interpolation(const Mat1f &reinstated_clear, Mat1f &collated, vector<int> collated_inds, int sample_size)
+{
+  int y,x,t, i, ind;
+  int time_size = collated_inds.size();
+  int clear_count;
+  for(y = 0; y < HEIGHT; ++y){
+    for(x = 0; x < WIDTH; ++x){
+      for(i = 0; i < time_size; ++i){
+        ind = collated_inds[i];
+        clear_count = 0;
+        if(ind < COLLATED_LAG){
+          for(t = -ind; t < COLLATED_LAG+1; ++t){
+            if(std::isfinite(reinstated_clear(y,x,ind+t))){
+              clear_count++;
+            }                  
+          }
+        }
+
+        else if(ind >= COLLATED_LAG && ((sample_size - ind) > COLLATED_LAG)){
+          for(t = -COLLATED_LAG; t < COLLATED_LAG+1; ++t){
+            if(std::isfinite(reinstated_clear(y,x,ind+t))){
+              clear_count++;
+            }            
+          }
+        }
+
+        else if(sample_size - ind <= COLLATED_LAG){
+          for(t = -COLLATED_LAG; t < (sample_size - ind); ++t){
+            if(std::isfinite(reinstated_clear(y,x,ind+t))){
+              clear_count++;
+            }      
+          }
+        }
+
+        else eprintf("remove_long_interpolation: index %d invalid\n", ind);
+
+        if( clear_count == 0 ) collated(y,x,i) = NAN;
       }
     }
   }

@@ -8,7 +8,7 @@ import scipy.io as sio
 original_files = [line.rstrip('\n') for line in open('ahitest.txt')]
 #original_files = sorted(glob.glob("../data/2016-11-15/*.nc"))
 clear_files = sorted(glob.glob("data/clear/*.nc"))
-smooth_files = sorted(glob.glob("data/smooth_test/*.nc"))
+smooth_files = sorted(glob.glob("data/smooth/*.nc"))
 approx_files = sorted(glob.glob("data/approx/*.nc"))
 collated_files = sorted(glob.glob("data/collated_mat/*.nc"))
 approx2_files = sorted(glob.glob("data/approx2/*.nc"))
@@ -48,20 +48,22 @@ def read_var(cdf,variable):
     return data
 
 
-#points = [(3351, 3398),(3353, 3400),(2639, 4975),(544,3237),(524,3173),(573,3190),(2664,5209),(2692,5198),(2701,5174),(2705,5186),(3386,1678),(3386,1677)]
-#points = [(1878,3085),(1879,3081)]
-#points = [(1471, 875), (1477, 1647), (1539, 624), (1555, 1538), (1590, 640), (1596, 640), (1603, 638), (1706, 694), (1712, 693), (1723, 691), (1725, 524), (1726, 521)]
-points = [(4451,3534),(3773,1502),(1577,2328),(1894,4455)]
-points = [(3790,1683),(1564,1535),(1564,1536),(4428,3346),(4438,3347),(729,2917),(735,2917),(726,2870),(730,2870),(1487,1714),(1487,1720),(1494,1715),(437,4080),(442,4082),(802,4209),(3210,5058),(3218,5064)]
+points = [(1738,2880), (1533,1649), (4255,1488),   (3975,1405), (4443,3479), (4516,3858), (1885,4360), (4763,2138),   (1906,507)]
+points = [(3935,1305), (3939,1322), (3947,1307)]
+#y_lims = [(299,302),   (290,295),   (292.5,295.5), (296,299),   (294,297),   (290,295),   (298,303),   (284.5,287.5), (298,302) ]
 times = []
 
 hour_ind = []
+x_lims = []
 
 for i,approx_file in enumerate(approx_filenames):
     if approx_file[10:12] == '00':
         times.append(approx_file[8:12])
         hour_ind.append(i)
+    if approx_file[8:12] == '0000':
+        x_lims.append(i)
 
+x_lims = tuple(x_lims)
 
 sst = {}
 second_pass = {}
@@ -92,18 +94,16 @@ total_files = len(approx_files)
 for i in range(total_files):
 
     base_file = approx_files[i].split('/')[2]
-    """
-    approxnc=netCDF4.Dataset(f)
+    
+    approxnc = netCDF4.Dataset(approx_files[i])
     approx_val = read_var(approxnc,'sea_surface_temperature')
     approxnc.close()
 
-    filename = smooth_files[smooth_filenames.index(f.split('/')[2])]
-
-    smoothnc=netCDF4.Dataset(filename)
+    smoothnc = netCDF4.Dataset(smooth_files[i])
     smooth_val = read_var(smoothnc,'sea_surface_temperature')
     smoothnc.close()
-    """
-    approxnc=netCDF4.Dataset(approx2_files[i])
+    
+    approxnc = netCDF4.Dataset(approx2_files[i])
     approx2_val = read_var(approxnc,'sea_surface_temperature')
     approxnc.close()
 
@@ -132,25 +132,21 @@ for i in range(total_files):
     reinstated_vals = read_var(reinstatednc,'sea_surface_temperature')
     reinstatednc.close()
 
-    """
-    clearnc=netCDF4.Dataset(filename)
-    sst_clear_val = read_var(clearnc,'brightness_temperature_11um2')
-    clearnc.close()
-    """
     filename = original_files[orig_filenames.index(base_file)]
 
     orignc=netCDF4.Dataset(filename)
     sst_val = read_var(orignc,'sea_surface_temperature')
     orignc.close()
 
+    print "finished " + filename
 
     for j in points:
         
         sst[j].append(sst_val[j[0],j[1]])
 
-        #approx[j].append(approx_val[j[0],j[1]])
+        approx[j].append(approx_val[j[0],j[1]])
           
-        #smooth[j].append(smooth_val[j[0],j[1]])
+        smooth[j].append(smooth_val[j[0],j[1]])
 
         approx2[j].append(approx2_val[j[0],j[1]])
 
@@ -162,12 +158,6 @@ for i in range(total_files):
 
         reinstated[j].append(reinstated_vals[j[0],j[1]])
 
-        """
-        if(sst_clear_val[j[0],j[1]] == 255):
-        	clear[j].append(sst[j][i])
-        else:
-        	clear[j].append(np.nan)
-        """
         if(sst_clear_pass2[j[0],j[1]]):
             second_pass[j].append(sst[j][i])
         else:
@@ -179,27 +169,25 @@ for j in points:
     for i in hour_ind:
         h[j].append(collated2[j][i])
 
-for i in points:
-    outfile = str(i)
-    
-    #sio.savemat(outfile,{"sst":sst[i],'approx':approx[i],"second_pass":second_pass[i],"clear":clear[i],"smooth":smooth[i],"interpolated":interpolated[i],"collated":collated[i], "times":times})
+x_inds = range(total_files)
+for j,i in enumerate(points):
     
     fig = plt.figure(figsize=(12,10))
     fig.canvas.set_window_title(str(i))
-    plt.title(str(i) + " pchip smooth\n")
-    #plt.plot(range(total_files),approx[i],'.',label="approx")
-    plt.plot(range(total_files),approx2[i],'.',label="approx2")
-    plt.plot(range(total_files),smooth_collate[i],label="smooth collate")
-    plt.plot(range(total_files),second_pass[i],'o', markersize=15,label="pass2")
-    plt.plot(range(total_files),reinstated[i],'.', markersize=15,label="reinstated")
-    #plt.plot(range(total_files),clear[i],'.', markersize=15,label="clear")
-    plt.plot(range(total_files),sst[i],label="orig")
-    #plt.plot(range(total_files),smooth[i],label="smooth")
-    
-    #plt.plot(collated_inds,interpolated[i],'.',markersize=15,label="interp")
-    plt.plot(range(total_files),collated[i],label="collated")
-    plt.plot(range(total_files),collated2[i],'.',markersize=15,label="collated2")
-    plt.plot(hour_ind,h[i],'.',markersize=15,label="hour")
-    plt.legend()
-    plt.xticks(hour_ind,times,rotation='vertical')
+    plt.title("2017 - 01 - 08   Location: " + str(i), fontsize=20)
+    plt.grid()
+    plt.plot(x_inds, approx[i], '-', c="#D98719", label="Approx 1")
+    plt.plot(x_inds, approx2[i], '-m', label="Approx 2")
+    plt.plot(x_inds, second_pass[i], 'o', c="#39FF14",fillstyle='none', markeredgewidth=2, markersize=12, label="Clear 1")
+    plt.plot(x_inds, reinstated[i], '.r', markersize=15, label="Clear 2")
+    plt.plot(x_inds,sst[i], 'b', label="Original SST")
+    plt.plot(x_inds,smooth[i], 'g', label="Smooth")
+    plt.plot(x_inds,collated[i], 'r', label="Collated 1")
+    plt.plot(x_inds,collated2[i], '-k', lw=3, label="Collated 2")
+    plt.plot(hour_ind,h[i], '.c', markersize=20, label="Hour")
+    plt.legend(fontsize=15)
+    plt.yticks(fontsize=15)
+    plt.xticks(hour_ind, times, rotation=-45, fontsize=15)
+    plt.xlim(x_lims)
+    #plt.ylim(y_lims[j])
     plt.show()
