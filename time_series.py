@@ -49,7 +49,7 @@ def read_var(cdf,variable):
 
 
 points = [(1738,2880), (1533,1649), (4255,1488),   (3975,1405), (4443,3479), (4516,3858), (1885,4360), (4763,2138),   (1906,507)]
-points = [(3935,1305), (3939,1322), (3947,1307)]
+points = [(3922,1271), (3920,1288), (3939,1282), (4270, 1547), (4270,1543), (4269,1542) ]
 #y_lims = [(299,302),   (290,295),   (292.5,295.5), (296,299),   (294,297),   (290,295),   (298,303),   (284.5,287.5), (298,302) ]
 times = []
 
@@ -174,7 +174,7 @@ for j,i in enumerate(points):
     
     fig = plt.figure(figsize=(12,10))
     fig.canvas.set_window_title(str(i))
-    plt.title("2017 - 01 - 08   Location: " + str(i), fontsize=20)
+    plt.title("2017 - 01 - 10   Location: " + str(i), fontsize=20)
     plt.grid()
     plt.plot(x_inds, approx[i], '-', c="#D98719", label="Approx 1")
     plt.plot(x_inds, approx2[i], '-m', label="Approx 2")

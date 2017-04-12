@@ -43,7 +43,7 @@ const int LAND_KERNEL = 7;
 
 const float T_DERIV = 0.04;
 const float T_EIGEN = 0.1;
-const float T_RATIO = 0.3;
+const float T_RATIO = 0.55;
 const float T_COLD = 0.2;
 
 const int SPACE_LAG = 9;

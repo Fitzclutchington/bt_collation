@@ -1,14 +1,21 @@
 #REFERENCE_SST IS DATE OF REFERENCE
 
 import netCDF4
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import glob
+import scipy.io as sio
 
 def read_var(cdf,variable):
     data = np.squeeze(cdf[variable][:])
     return data
+
+if len(sys.argv) < 3:
+    print "usage: python stats_clean.py <reference> <time>"
+    print "time as yyyy-mm-dd"
+    sys.exit()
 
 clear_files = sorted(glob.glob("data/clear/*.nc"))
 approx_files = sorted(glob.glob("data/approx/*.nc"))
@@ -63,7 +70,12 @@ clear_interp = []
 #clear_smooth = []
 acspo = []
 
-ref_file = "/home/fitz/sst_approximation/data/ACSPO_V2.41_H08_AHI_2017-01-10_1210-1220_20170331.030457.nc"
+ref_file = sys.argv[1]
+time_file = sys.argv[2]
+outfile = 'means_' + time_file
+print outfile
+
+#ref_file = "/home/fitz/sst_approximation/data/ACSPO_V2.41_H08_AHI_2017-01-10_1210-1220_20170331.030457.nc"
 cdf = netCDF4.Dataset(ref_file)
 ref_sst = read_var(cdf,"sst_reynolds")
 sza = read_var(cdf,"satellite_zenith_angle")
@@ -74,10 +86,11 @@ ref_sst[~mask] = np.nan
 total_files = len(approx_files)
 
 times =[]
-
+time_stamps = []
 hour_ind = []
 
 for i,approx_file in enumerate(approx_filenames):
+    time_stamps.append(approx_file[8:12])
     if approx_file[10:12] == '00':
         times.append(approx_file[8:12])
         hour_ind.append(i)
@@ -190,6 +203,14 @@ for i in range(total_files):
     clear_reinstated.append(np.isfinite(col).sum())
     cdf.close() 
 
+outfile = 'std_' + time_file
+sio.savemat(outfile, {"sst":sst_std, "pass2":pass2_std, "collated1":collated, "collated2":collated2, "scollated":scollated,"reinstated":reinstated_std, "approx1":approx_std, "approx2":approx2_std, "time_stamps":time_stamps})
+
+outfile = 'means_' + time_file
+sio.savemat(outfile,{ 'sst':sst_mean,'pass2':pass2_mean,'collated1':collated_mean,'collated2':collated2_mean,'scollated':scollated_mean,'reinstated':reinstated_mean,'approx1':approx_mean,'approx2':approx2_mean,'time_stamps':time_stamps})
+
+outfile = 'num_obs_' + time_file
+sio.savemat(outfile,{ "sst":acspo,"pass2":clear_pass2,"collated1":clear_col,"collated2":clear_col2,"scollated":clear_scol,"reinstated":clear_reinstated,"approx1":clear_approx,"approx2":clear_approx2, "time_stamps":time_stamps})
 
 plt.figure()
 plt.grid()
@@ -209,15 +230,14 @@ plt.title("Standard Deviation Interpolated Collated")
 plt.show()
 
 
+
 plt.figure()
 plt.grid()
 plt.plot(collated_mean, label="collated")
 plt.plot(collated2_mean, label="collated2")
 plt.plot(scollated_mean, label="scollated")
-#plt.plot(smooth_collate_inds,smooth_collated, label="smooth collated")
 plt.plot(sst_mean, label="acspo")
 plt.plot(pass2_mean, label="clear2")
-#plt.plot(clear_mean,label="clear")
 plt.plot(reinstated_mean, label="reinstated")
 plt.plot(approx_mean, label="approx")
 plt.plot(approx2_mean, label="approx2")
@@ -225,6 +245,7 @@ plt.legend()
 plt.xticks(hour_ind,times,rotation='vertical')
 plt.title("Standard Deviation Interpolated Collated")
 plt.show()
+
 
 """
 plt.plot(collated_inds,collated_interp, label="interpolated")
@@ -252,9 +273,7 @@ plt.title("Number Clear Interpolated Collated")
 plt.xticks(hour_ind,times,rotation='vertical')
 plt.show()
 
-"""
-plt.plot(collated_inds,clear_interp, label="interpolated")
+outfile = 'num_obs_' + time_file
+sio.savemat(outfile,{ "sst":acspo,"pass2":clear_pass2,"collated1":clear_col,"collated2":clear_col2,"scollated":clear_scol,"reinstated":clear_reinstated,"approx1":clear_approx,"approx2":clear_approx2, "time_stamps":time_stamps})
 
-
-"""
 
