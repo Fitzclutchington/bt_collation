@@ -463,7 +463,7 @@ compute_eigenvals(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Ma
   int y,x,i,j,k,t;
   int y_delta = 2;
   int x_delta = 2;
-  int t_delta = 2;
+  int t_delta = 1;
 
   int min_num = (2*y_delta +1) *(2*x_delta + 1)*(2*t_delta+1)/2;
   int count_dim = 0;
@@ -938,4 +938,120 @@ remove_long_interpolation(const Mat1f &reinstated_clear, Mat1f &collated, vector
     }
   }
 
+}
+
+void
+compute_resmean(const Mat1f &bt08,const Mat1f &bt10,const Mat1f &bt11,const Mat1f &bt12,
+                  const Mat1b border_mask, Mat1f &res_mean)
+{
+  int y,x,i,j,k;
+  int y_delta = 2;
+  int x_delta = 2;
+
+  int min_num = (2*y_delta +1) *(2*x_delta + 1)*3/2;
+  int count_dim = 0;
+  float bt08_sum,bt10_sum,bt11_sum,bt12_sum,count,window_sum,row_sum;
+  float temp_bt08;
+  float temp_bt10;
+  float temp_bt11;
+  float temp_bt12;
+
+
+  float bt08_mean;
+  float bt10_mean;
+  float bt11_mean;
+  float bt12_mean;
+
+
+  vector<float> valid_bt08;
+  vector<float> valid_bt10;
+  vector<float> valid_bt11;
+  vector<float> valid_bt12;
+
+  vector<int> left_inds;
+
+  Vector4f ones(1,1,1,1);
+  Vector4f e1;
+  MatrixXf r;
+  Matrix4f A;
+
+  for(y=y_delta;y<HEIGHT-y_delta;y++){
+    for(x=x_delta;x<WIDTH-x_delta;x++){
+      if(border_mask(y,x) == 0){
+    
+        // calc first window
+        // we know that first left are nans so we don't calculate left inds     
+        bt08_sum=bt10_sum=bt11_sum=bt12_sum=0;
+        valid_bt08.clear();
+        valid_bt10.clear();
+        valid_bt11.clear();
+        valid_bt12.clear();
+        for(i=-y_delta;i<y_delta+1;i++){
+          for(j=-x_delta;j<x_delta+1;j++){              
+            for(k=0;k<3;k++){
+              
+              temp_bt08 = bt08(y+i,x+j,k);
+              temp_bt10 = bt10(y+i,x+j,k);
+              temp_bt11 = bt11(y+i,x+j,k);
+              temp_bt12 = bt12(y+i,x+j,k);
+
+              if(!std::isnan(temp_bt08) && !std::isnan(temp_bt10) && !std::isnan(temp_bt11) && !std::isnan(temp_bt12)){
+                valid_bt08.push_back(temp_bt08);
+                valid_bt10.push_back(temp_bt10);
+                valid_bt11.push_back(temp_bt11);
+                valid_bt12.push_back(temp_bt12);
+
+                bt08_sum+= temp_bt08;
+                bt10_sum+=temp_bt10;
+                bt11_sum+=temp_bt11;
+                bt12_sum+=temp_bt12;
+              }
+            }
+          }
+        }
+  
+        //if numberof pixels in window is greater tan threshold
+        // calculate the mean of the norm of the pixels
+        // projected into the second eigenvector
+        count = valid_bt08.size();
+
+        count_dim = valid_bt08.size();
+      
+        if(count > min_num){
+
+          bt08_mean =bt08_sum/count;
+          bt10_mean =bt10_sum/count;
+          bt11_mean =bt11_sum/count;
+          bt12_mean =bt12_sum/count;
+
+          MatrixXf window(count_dim,4);
+          for(i = 0; i < count; ++i){
+            window(i,0) = valid_bt08[i] - bt08_mean;
+            window(i,1) = valid_bt10[i] - bt10_mean;
+            window(i,2) = valid_bt11[i] - bt11_mean;
+            window(i,3) = valid_bt12[i] - bt12_mean;
+          }
+          
+          A = (window.transpose()*window);
+          e1 = A*(A*ones);
+          e1/=sqrt(e1.transpose()*e1);
+          r = window - (window*e1)*e1.transpose();
+          window_sum =0;
+          for(i = 0;i < count; ++i){
+            row_sum = 0;
+            row_sum+=r(i,0)*r(i,0);
+            row_sum+=r(i,1)*r(i,1);
+            row_sum+=r(i,2)*r(i,2);
+            row_sum+=r(i,3)*r(i,3);
+            row_sum = sqrt(row_sum);
+            window_sum += row_sum;
+          }
+          
+          res_mean(y,x) = window_sum/(float)valid_bt08.size();
+
+        }
+        else res_mean(y,x) = NAN;
+      }
+    }
+  }
 }

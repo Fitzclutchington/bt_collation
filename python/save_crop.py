@@ -11,17 +11,23 @@ if len(sys.argv) < 3:
 	print "usage: python save_crop.py <output_folder> <file_list>"
 	print "date as yyyy-mm-dd"
 	
-
+"""
 min_ys = [4600, 4150, 3500, 3500, 1300, 500]
 max_ys = [5101, 4651, 4501, 4001, 1801, 1001]
 min_xs = [2700, 3250, 1200, 3000, 1200, 2300]
 max_xs = [3701, 4251, 1701, 4001, 2201, 3301]
+"""
+
+min_ys = [3200]
+max_ys = [4201]
+min_xs = [2700]
+max_xs = [3701]
 
 output_folder = sys.argv[1].strip('/')
 
-
 file_list = sys.argv[2]
 data_folder = '../data/'
+output_folder = '/'.join([data_folder,output_folder])
 
 x_lims = []
 original_files = [line.rstrip('\n') for line in open(file_list)]

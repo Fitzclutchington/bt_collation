@@ -19,9 +19,9 @@ const int SECOND_PASS_LAG = SECOND_PASS_SIZE / 2;
 const int SMOOTH_TIME_WINDOW = 19;
 const int SMOOTH_WINDOW_LAG = SMOOTH_TIME_WINDOW/2;
 const int CLEAR_SPATIAL_SMOOTH = 50;
-const int COLLATED_SMOOTH_LAG = 3;
+const int COLLATED_SMOOTH_LAG = 7;
 
-const float T_SMOOTH_COLLATED = 0.4; //0.2
+const float T_SMOOTH_COLLATED = 0.3; //0.2
 const float T_TL0 = 0.3;
 const float T_DIAG = 2*DELTA_SST*sqrt(FILTER_TIME_SIZE);
 const float T_NN = 2*DELTA_SST;
@@ -34,10 +34,11 @@ const float T_INTERP = 0.5; //change to .3
 
 
 const int COLLATED_LAG = 6;
+const float GAMMA2 = COLLATED_LAG;
 const float GAMMA = COLLATED_LAG/2.0;
 
-const float MU_CLEAR = 0.6;
-const float MU_APPROX = 0.4;
+const float MU_CLEAR = 0.8;
+const float MU_APPROX = 0.2;
 
 const int LAND_KERNEL = 7;
 
@@ -45,6 +46,7 @@ const float T_DERIV = 0.04;
 const float T_EIGEN = 0.1;
 const float T_RATIO = 0.55;
 const float T_COLD = 0.2;
+const float T_REF = 0.5;
 
 const int SPACE_LAG = 9;
 const int PASS_THRESH = 1000;

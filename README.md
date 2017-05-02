@@ -27,10 +27,12 @@ Current attempt involves averaging clear and approx values in a window (5,5,13)
 Issues
 --------
 
-Cloud leakage obviously hurts all curves
-	- lowers smooth time series
-	- worse approximation (projecting cloudy pixels)
-	- Cloud leakage creeps into collation averaging
+	-Cloud leakage obviously hurts all curves
+		- lowers smooth time series
+		- worse approximation (projecting cloudy pixels)
+		- Cloud leakage creeps into collation averaging
+	-Some granules are missing due to calibration of satellite
+		-new granules must be interpolated somehow
 
 Current Ideas
 --------------

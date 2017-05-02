@@ -372,3 +372,16 @@ compute_dtmask(const Mat1f &reference,const Mat1f &samples,Mat1f &samples_clear,
         }
     }
 }
+
+void
+reinstate_near_reference(Mat1b &bt_mask,const Mat1f sst, const Mat1f reference, const int cur_ind)
+{
+    int y,x;
+    for(y = 0; y < HEIGHT; ++y){
+        for(x = 0; x < WIDTH; ++x){
+            if(fabs(sst(y,x,cur_ind) - reference(y,x)) < T_REF){
+                bt_mask(y,x) = 255;
+            } 
+        }
+    }
+}

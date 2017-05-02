@@ -379,12 +379,12 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
 
     //fill gamma matrix
     //first and last row have different values
-    Gamma(0,0) = GAMMA;Gamma(0,1) = -GAMMA;
-    Gamma(collated_size-1,collated_size-1) = GAMMA; Gamma(collated_size-1,collated_size-2) = -GAMMA;
+    Gamma(0,0) = GAMMA2;Gamma(0,1) = -GAMMA2;
+    Gamma(collated_size-1,collated_size-1) = GAMMA2; Gamma(collated_size-1,collated_size-2) = -GAMMA2;
     for(i=1;i<collated_size-1;i++){
-        Gamma(i,i)   = 2*GAMMA;
-        Gamma(i,i-1) = -GAMMA;
-        Gamma(i,i+1) = -GAMMA;
+        Gamma(i,i)   = 2*GAMMA2;
+        Gamma(i,i-1) = -GAMMA2;
+        Gamma(i,i+1) = -GAMMA2;
     }
     
     printf("GAMMA initializaed\n");
@@ -491,9 +491,9 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     /////////////////////////////////////////
     
    
-    int window[3] = {5, 5, COLLATED_SMOOTH_LAG};
+    int window[3] = {3, 3, COLLATED_SMOOTH_LAG};
     Mat1f collated_smooth(3,dims_interpolated);
-    dims_interpolated[2]--; // account for removal of high derivative
+    dims_interpolated[2] = collated_interp_size - 1; // account for removal of high derivative
     Mat1f reinstated_clear(3,dims_interpolated);
     Mat1f original_sst(HEIGHT,WIDTH);
     Mat1f reference(HEIGHT, WIDTH);
@@ -566,17 +566,24 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     //Mat1f collated_approx(3,dims);
     save_mat(approx2_paths, approx, "sea_surface_temperature",true);
 
+    Gamma(0,0) = GAMMA;Gamma(0,1) = -GAMMA;
+    Gamma(collated_size-1,collated_size-1) = GAMMA; Gamma(collated_size-1,collated_size-2) = -GAMMA;
+    for(i=1;i<collated_size-1;i++){
+        Gamma(i,i)   = 2*GAMMA;
+        Gamma(i,i-1) = -GAMMA;
+        Gamma(i,i+1) = -GAMMA;
+    }
+
 
     //start = std::chrono::system_clock::now();
     collated.setTo(NAN);
     printf("Starting Collation on sea_surface_temperature\n");
     collate_samples(reinstated_clear, approx, collated, Gamma, interp_inds,l2p_mask,collated_interp_size, ref_file);
     printf("Finished Collation on sea_surface_temperature\n");
-    approx.release();
+    //approx.release();
 
     remove_long_interpolation(reinstated_clear, collated, interp_inds, collated_interp_size);
-    reinstated_clear.release();
-    
+
 
     collated_interp.setTo(NAN);
     for(i = 0; i < collated_size; ++i){
@@ -601,8 +608,83 @@ approx_clear(const vector<string> &smooth_paths, const vector<string> &clear_pat
     else{
         save_mat(collated_hour_paths, collated, "sea_surface_temperature",true);
     }
-    collated.release();
-    collated_interp.release();
+    
+
+    // run for  brightness temperatures
+    // use reinstated as mask for all bands
+    // use collated_smooth and bt reinstated in approx
+    // run colaltion with approx and bt clear
+    /*
+    string brightness_temps[4] = {"brightness_temperature_08um6", "brightness_temperature_10um4", "brightness_temperature_11um2", "brightness_temperature_12um3" };
+    Mat1f brightness_temp(HEIGHT,WIDTH);
+
+    // for each brightness temperature
+    for(int temp = 0; temp < 4; ++ temp){
+
+         
+
+        // open brightness temperature
+        // mask cloudy pixels
+        
+
+        for(i = 0; i < collated_interp_size; ++i){        
+            get_var(original_paths[i+original_lag+collated_inds[0]], brightness_temp, brightness_temps[temp]);
+            for(y = 0; y < HEIGHT; ++y){
+                for(x = 0; x < WIDTH; ++x){
+                    if(std::isfinite(reinstated_clear(y,x,i))){
+                        reinstated_clear(y,x,i) = brightness_temp(y,x);
+                    }
+                }
+            }
+        }
+        printf("opened finised opening files for %s\n",brightness_temps[temp].c_str());
+
+        // produce approx
+        approx.setTo(NAN);
+
+        calc_approximate(collated_smooth,reinstated_clear, l2p_mask, approx, ref_file, collated_interp_size);
+
+        printf("finished approximation for %s\n",brightness_temps[temp].c_str());
+
+
+        //start = std::chrono::system_clock::now();
+        collated.setTo(NAN);
+        printf("Starting Collation on %s\n",brightness_temps[temp].c_str());
+        collate_samples(reinstated_clear, approx, collated, Gamma, interp_inds,l2p_mask,collated_interp_size, ref_file);
+        printf("Finished Collation on %s\n",brightness_temps[temp].c_str());
+
+        remove_long_interpolation(reinstated_clear, collated, interp_inds, collated_interp_size);
+        printf("Finished removing long interpolation on %s\n",brightness_temps[temp].c_str());
+        
+
+        collated_interp.setTo(NAN);
+        for(i = 0; i < collated_size; ++i){
+            for(y = 0; y < HEIGHT; ++y){
+                for(x = 0; x < WIDTH; ++x){
+                    collated_interp(y,x,interp_inds[i]) = collated(y,x,i);
+                }
+            }
+            
+        }
+        
+        //collated.release();
+        printf("starting interpolation of collated values\n");
+        if(interp){
+            interpolate_hermite(collated_interp,l2p_mask,collated_interp_size,T_INTERP,2*INTERP_DIST,false);
+            remove_last_value(collated_interp,collated_interp_size);
+            save_mat(collated2_paths, collated_interp, brightness_temps[temp],false);
+        }
+        //end = std::chrono::system_clock::now();
+        //elapsed =  std::chrono::duration_cast<std::chrono::seconds>(end - start);
+        //std::cout << "time to finish second collation = " << elapsed.count() << '\n';
+        else{
+            save_mat(collated_hour_paths, collated, brightness_temps[temp], false);
+        }
+        //collated.release();
+        //collated_interp.release();
+    
+    }
+    */
     
 }
 

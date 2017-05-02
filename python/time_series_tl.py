@@ -4,16 +4,23 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import glob
 import scipy.io as sio
+import sys
 
-original_files = [line.rstrip('\n') for line in open('ahitest.txt')]
-clear_files = sorted(glob.glob("data/clear/*.nc"))
-pass2_files = sorted(glob.glob("data/pass2/*.nc"))
-TL0_files = sorted(glob.glob("data/TL0/*.nc"))
-TL1_files = sorted(glob.glob("data/TL1/*.nc"))
-TL2_files = sorted(glob.glob("data/TL2/*.nc"))
+if len(sys.argv) < 2:
+    print "usage: python time_series.py <point_file>"
+    sys.exit()
+
+point_file = sys.argv[1]
+
+original_files = [line.rstrip('\n') for line in open('../ahitest.txt')]
+clear_files = sorted(glob.glob("../data/clear/*.nc"))
+pass2_files = sorted(glob.glob("../data/pass2/*.nc"))
+TL0_files = sorted(glob.glob("../data/TL0/*.nc"))
+TL1_files = sorted(glob.glob("../data/TL1/*.nc"))
+TL2_files = sorted(glob.glob("../data/TL2/*.nc"))
 
 
-orig_filenames = [x.split('/')[6] for x in original_files]
+orig_filenames = [x.split('/')[-1] for x in original_files]
 clear_filenames = [x.split('/')[-1] for x in clear_files]
 pass2_filenames = [x.split('/')[-1] for x in pass2_files]
 
@@ -21,8 +28,15 @@ def read_var(cdf,variable):
     data = np.squeeze(cdf[variable][:])
     return data
 
+def read_points(point_file):
+    points = []
+    with open(point_file, 'r') as f:
+        for line in f:
+            point = map(int,line.split(','))
+            points.append((point[0],point[1]))
+    return points
 
-points = [(1631,2621), (1695,2316), (785,2316), (3676,1006), (4250,3767), (1800, 1690)]
+points = read_points(point_file)
 #y_lims = [(299,302),   (290,295),   (292.5,295.5), (296,299),   (294,297),   (290,295),   (298,303),   (284.5,287.5), (298,302) ]
 times = []
 
@@ -58,7 +72,7 @@ for i in points:
 total_files = len(pass2_files)
 for i in range(total_files):
 
-    base_file = pass2_files[i].split('/')[2]
+    base_file = pass2_files[i].split('/')[-1]
         
     pass2nc = netCDF4.Dataset(pass2_files[i])
     pass2_vals = read_var(pass2nc,'brightness_temperature_11um2')

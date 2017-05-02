@@ -1,6 +1,8 @@
 data/
 bt_collation/
 unused_files/
+mask_test/
+eigen*
 *.zip
 *.pyc
 *.swp

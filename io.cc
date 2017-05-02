@@ -843,17 +843,18 @@ readgranule(const string path, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08, Mat1f &bt1
 }
 
 void
-readgranule_temps(const string path, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12, Mat1f &bt08,int ind)
+readgranule_1d(const string path, Mat1f &bt08, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12)
 {
 	// TODO: deal with non-continuous time interval 
 	int ncid;
 	float val;
+
 	int n = nc_open(path.c_str(), 0, &ncid);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_open failed for %s", path.c_str());
 	}
 	
-	Mat img;
+	Mat1s img;
 
 	int varid = readvar(ncid, "brightness_temperature_11um2", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
@@ -876,10 +877,10 @@ readgranule_temps(const string path, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12, Mat1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 bt11(y,x,ind) = NAN;
-			 val = img.at<short>(0, y, x)*scale + offset;
+			 bt11(y,x) = NAN;
+			 val = img(0, y, x)*scale + offset;
 			 if(val > 0){
-			 	bt11(y, x,ind) = val;
+			 	bt11(y, x) = val;
 			 }
 		}
 	}
@@ -904,10 +905,10 @@ readgranule_temps(const string path, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12, Mat1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
-			 bt12(y,x,ind) = NAN;
+			 val = img(0, y, x)*scale + offset;
+			 bt12(y,x) = NAN;
 			 if(val > 0){
-			 	bt12(y, x,ind) = val;
+			 	bt12(y, x) = val;
 			 }
 		}
 	}
@@ -932,14 +933,14 @@ readgranule_temps(const string path, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12, Mat1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
-			 bt08(y,x,ind) = NAN;
+			 val = img(0, y, x)*scale + offset;
+			 bt08(y,x) = NAN;
 			 if(val > 0){
-			 	bt08(y, x,ind) = val;
+			 	bt08(y, x) = val;
 			 }
 		}
 	}
-
+	
 	varid = readvar(ncid, "brightness_temperature_10um4", img);
 	if(img.dims != 3 || img.size[0] != 1 || img.size[1] != HEIGHT || img.size[2] != HEIGHT){
 		printf("unpexpected dimensions\n");
@@ -960,14 +961,14 @@ readgranule_temps(const string path, Mat1f &bt10, Mat1f &bt11, Mat1f &bt12, Mat1
 
 	for(int y = 0; y < HEIGHT; y++){
 		for(int x = 0; x < WIDTH; x++){
-			 val = img.at<short>(0, y, x)*scale + offset;
-			 bt10(y,x,ind) = NAN;
+			 val = img(0, y, x)*scale + offset;
+			 bt10(y,x) = NAN;
 			 if(val > 0){
-			 	bt10(y, x, ind) = val;
+			 	bt10(y, x) = val;
 			 }
 		}
 	}
-
+    
 	n = nc_close(ncid);
 	if(n != NC_NOERR){
 		ncfatal(n, "nc_close failed");

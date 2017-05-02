@@ -38,7 +38,9 @@ generate_masks(const Mat1f &bt08, const Mat1f &bt10, const Mat1f &bt11, const Ma
     compute_tl0(sst, border_mask, bt11_clear);
     printf("finished eigen mask\n");  
 
-    generate_mask(bt11_clear, bt_mask); 
+    generate_mask(bt11_clear, bt_mask);
+
+    reinstate_near_reference(bt_mask, sst, reference, cur_position); 
 
 }
 

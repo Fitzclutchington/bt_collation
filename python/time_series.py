@@ -4,31 +4,40 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import glob
 import scipy.io as sio
+import sys
 
-original_files = [line.rstrip('\n') for line in open('ahitest.txt')]
+if len(sys.argv) < 4:
+    print "usage: python time_series.py <point_file> <variable_name> <reference_file>"
+    sys.exit()
+
+point_file = sys.argv[1]
+var = sys.argv[2]
+ref_file = sys.argv[3]
+
+original_files = [line.rstrip('\n') for line in open('../ahitest.txt')]
 #original_files = sorted(glob.glob("../data/2016-11-15/*.nc"))
-clear_files = sorted(glob.glob("data/clear/*.nc"))
-smooth_files = sorted(glob.glob("data/smooth/*.nc"))
-approx_files = sorted(glob.glob("data/approx/*.nc"))
-collated_files = sorted(glob.glob("data/collated_mat/*.nc"))
-approx2_files = sorted(glob.glob("data/approx2/*.nc"))
-collated2_files = sorted(glob.glob("data/collated_mat2/*.nc"))
-reinstated_files = sorted(glob.glob("data/reinstated/*.nc"))
-pass2_files = sorted(glob.glob("data/pass2/*.nc"))
-smooth_collate_files = sorted(glob.glob("data/smooth_collate/*.nc"))
+clear_files = sorted(glob.glob("../data/clear/*.nc"))
+smooth_files = sorted(glob.glob("../data/smooth/*.nc"))
+approx_files = sorted(glob.glob("../data/approx/*.nc"))
+collated_files = sorted(glob.glob("../data/collated_mat/*.nc"))
+approx2_files = sorted(glob.glob("../data/approx2/*.nc"))
+collated2_files = sorted(glob.glob("../data/collated_mat2/*.nc"))
+reinstated_files = sorted(glob.glob("../data/reinstated/*.nc"))
+pass2_files = sorted(glob.glob("../data/pass2/*.nc"))
+smooth_collate_files = sorted(glob.glob("../data/smooth_collate/*.nc"))
 
 
-original_files = [line.rstrip('\n') for line in open('ahitest.txt')]
+original_files = [line.rstrip('\n') for line in open('../ahitest.txt')]
 
-orig_filenames = [x.split('/')[6] for x in original_files]
-pass2_filenames = [x.split('/')[2] for x in pass2_files]
-approx_filenames = [x.split('/')[2] for x in approx_files]
-clear_filenames = [x.split('/')[2] for x in clear_files]
-smooth_filenames = [x.split('/')[2] for x in smooth_files]
-smooth_collate_filenames = [x.split('/')[2] for x in smooth_collate_files]
+orig_filenames = [x.split('/')[-1] for x in original_files]
+pass2_filenames = [x.split('/')[-1] for x in pass2_files]
+approx_filenames = [x.split('/')[-1] for x in approx_files]
+clear_filenames = [x.split('/')[-1] for x in clear_files]
+smooth_filenames = [x.split('/')[-1] for x in smooth_files]
+smooth_collate_filenames = [x.split('/')[-1] for x in smooth_collate_files]
 
-filenames = [x.split('/')[2] for x in smooth_files]
-original_filenames = [x.split('/')[6] for x in original_files]
+filenames = [x.split('/')[-1] for x in smooth_files]
+original_filenames = [x.split('/')[-1] for x in original_files]
 """
 TL0_files = []
 TL1_files = []
@@ -47,9 +56,16 @@ def read_var(cdf,variable):
     data = np.squeeze(cdf[variable][:])
     return data
 
+def read_points(point_file):
+    points = []
+    with open(point_file, 'r') as f:
+        for line in f:
+            point = map(int,line.split(','))
+            points.append((point[0],point[1]))
+    return points
 
-points = [(1738,2880), (1533,1649), (4255,1488),   (3975,1405), (4443,3479), (4516,3858), (1885,4360), (4763,2138),   (1906,507)]
-points = [(3922,1271), (3920,1288), (3939,1282), (4270, 1547), (4270,1543), (4269,1542) ]
+points = read_points(point_file)
+print points
 #y_lims = [(299,302),   (290,295),   (292.5,295.5), (296,299),   (294,297),   (290,295),   (298,303),   (284.5,287.5), (298,302) ]
 times = []
 
@@ -75,6 +91,7 @@ approx2 = {}
 collated2 = {}
 smooth_collate = {}
 reinstated = {}
+refs = {}
 h = {}
 
 for i in points:    
@@ -93,7 +110,7 @@ for i in points:
 total_files = len(approx_files)
 for i in range(total_files):
 
-    base_file = approx_files[i].split('/')[2]
+    base_file = approx_files[i].split('/')[-1]
     
     approxnc = netCDF4.Dataset(approx_files[i])
     approx_val = read_var(approxnc,'sea_surface_temperature')
@@ -125,8 +142,9 @@ for i in range(total_files):
     collatednc.close()
         
     collatednc = netCDF4.Dataset(collated2_files[i])
-    collated2_vals = read_var(collatednc,'sea_surface_temperature')
+    collated2_vals = read_var(collatednc,var)
     collatednc.close()
+
 
     reinstatednc = netCDF4.Dataset(reinstated_files[i])
     reinstated_vals = read_var(reinstatednc,'sea_surface_temperature')
@@ -169,12 +187,19 @@ for j in points:
     for i in hour_ind:
         h[j].append(collated2[j][i])
 
+cdf = netCDF4.Dataset(ref_file)
+sst_ref = read_var(cdf,"sst_reynolds")
+
+
+for j in points:
+    refs[j] = np.full(total_files,sst_ref[j[0],j[1]])
+
 x_inds = range(total_files)
 for j,i in enumerate(points):
     
     fig = plt.figure(figsize=(12,10))
     fig.canvas.set_window_title(str(i))
-    plt.title("2017 - 01 - 10   Location: " + str(i), fontsize=20)
+    plt.title("2017 - 04 - 02   Location: " + str(i) +"\n" + var, fontsize=20)
     plt.grid()
     plt.plot(x_inds, approx[i], '-', c="#D98719", label="Approx 1")
     plt.plot(x_inds, approx2[i], '-m', label="Approx 2")
@@ -182,12 +207,14 @@ for j,i in enumerate(points):
     plt.plot(x_inds, reinstated[i], '.r', markersize=15, label="Clear 2")
     plt.plot(x_inds,sst[i], 'b', label="Original SST")
     plt.plot(x_inds,smooth[i], 'g', label="Smooth")
+    plt.plot(x_inds,smooth_collate[i], label="Smooth Collate")
     plt.plot(x_inds,collated[i], 'r', label="Collated 1")
     plt.plot(x_inds,collated2[i], '-k', lw=3, label="Collated 2")
+    plt.plot(x_inds,refs[i], '-g', lw=3, label="reference")
     plt.plot(hour_ind,h[i], '.c', markersize=20, label="Hour")
     plt.legend(fontsize=15)
     plt.yticks(fontsize=15)
     plt.xticks(hour_ind, times, rotation=-45, fontsize=15)
-    plt.xlim(x_lims)
+    #plt.xlim(x_lims)
     #plt.ylim(y_lims[j])
     plt.show()

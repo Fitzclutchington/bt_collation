@@ -76,12 +76,40 @@ main(int argc, char *argv[])
     land_mask.release();
     invalid_mask.release();
     ice_mask.release();
-    //SAVENC(border_mask);
+
     
-    //SAVENC(l2p_mask);
     string filename;
     string clearpath, smoothpath, approxpath;
-        
+    /*
+    int dims[3] = {HEIGHT,WIDTH,3};
+
+    Mat1f bt08(3,dims);
+    Mat1f bt10(3,dims);
+    Mat1f bt11(3,dims);
+    Mat1f bt12(3,dims);
+    Mat1f sst(3,dims);
+    Mat1f res_mean(HEIGHT,WIDTH);
+
+    readgranule(original_paths[0].c_str(), bt11, bt12, bt08, bt10, sst, 0);
+    readgranule(original_paths[1].c_str(), bt11, bt12, bt08, bt10, sst, 1);
+    readgranule(original_paths[2].c_str(), bt11, bt12, bt08, bt10, sst, 2);
+
+    for(int i = 0; i<3;i++){
+        apply_l2p_flags( l2p_mask, bt11, i,false);
+        apply_l2p_flags( l2p_mask, bt12, i,false);
+        apply_l2p_flags( l2p_mask, bt10, i,false);
+        apply_l2p_flags( l2p_mask, bt08, i,false);
+    }
+
+  
+    filename = generate_filename(original_paths[1]);
+    string save_loc = '.' + filename;
+    printf("file = %s\n",filename.c_str());
+    compute_resmean(bt08, bt10, bt11,bt12,border_mask, res_mean);
+
+    SAVENC(res_mean);
+    */
+    
     /*
     //for debugging purposes
     int i;
@@ -104,8 +132,8 @@ main(int argc, char *argv[])
         smooth_paths.push_back(smoothpath.c_str());
     }
     
-
     */
+    
     
     
     printf("starting cloud filter\n");
@@ -135,7 +163,8 @@ main(int argc, char *argv[])
     
     //approx_clear(smooth_paths,second_pass_paths, original_paths,land_mask, invalid_mask, approx_paths,reference_file,interp);
     printf("starting approximation and collation\n");
-
+    
+    
     approx_clear(smooth_paths, second_pass_paths, original_paths,l2p_mask, reference_file, interp);
     printf("finished approximation and collation\n");
 

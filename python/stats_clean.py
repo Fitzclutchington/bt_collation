@@ -17,24 +17,24 @@ if len(sys.argv) < 3:
     print "time as yyyy-mm-dd"
     sys.exit()
 
-clear_files = sorted(glob.glob("data/clear/*.nc"))
-approx_files = sorted(glob.glob("data/approx/*.nc"))
-collated_files = sorted(glob.glob("data/collated_mat/*.nc"))
-approx2_files = sorted(glob.glob("data/approx2/*.nc"))
-collated2_files = sorted(glob.glob("data/collated_mat2/*.nc"))
-pass2_files = sorted(glob.glob("data/pass2/*.nc"))
-smooth_files = sorted(glob.glob("data/smooth_test/*.nc"))
-scollate_files = sorted(glob.glob("data/smooth_collate/*.nc"))
-reinstated_files = sorted(glob.glob("data/reinstated/*.nc"))
+clear_files = sorted(glob.glob("../data/clear/*.nc"))
+approx_files = sorted(glob.glob("../data/approx/*.nc"))
+collated_files = sorted(glob.glob("../data/collated_mat/*.nc"))
+approx2_files = sorted(glob.glob("../data/approx2/*.nc"))
+collated2_files = sorted(glob.glob("../data/collated_mat2/*.nc"))
+pass2_files = sorted(glob.glob("../data/pass2/*.nc"))
+smooth_files = sorted(glob.glob("../data/smooth_test/*.nc"))
+scollate_files = sorted(glob.glob("../data/smooth_collate/*.nc"))
+reinstated_files = sorted(glob.glob("../data/reinstated/*.nc"))
 
 #smooth_collate_files = sorted(glob.glob("data/smooth_collate/*.nc"))
 #collated_old = sorted(glob.glob("data/collated_old_eigen/*.nc"))
-original_files = [line.rstrip('\n') for line in open('ahitest.txt')]
-orig_filenames = [x.split('/')[6] for x in original_files]
-pass2_filenames = [x.split('/')[2] for x in pass2_files]
-approx_filenames = [x.split('/')[2] for x in approx_files]
-clear_filenames = [x.split('/')[2] for x in clear_files]
-smooth_filenames = [x.split('/')[2] for x in smooth_files]
+original_files = [line.rstrip('\n') for line in open('../ahitest.txt')]
+orig_filenames = [x.split('/')[-1] for x in original_files]
+pass2_filenames = [x.split('/')[-1] for x in pass2_files]
+approx_filenames = [x.split('/')[-1] for x in approx_files]
+clear_filenames = [x.split('/')[-1] for x in clear_files]
+smooth_filenames = [x.split('/')[-1] for x in smooth_files]
 #smooth_collate_filenames = [x.split('/')[2] for x in smooth_collate_files]
 
 collated = []
@@ -96,7 +96,7 @@ for i,approx_file in enumerate(approx_filenames):
         hour_ind.append(i)
 
 for i in range(total_files):
-    base_file = approx_files[i].split('/')[2]
+    base_file = approx_files[i].split('/')[-1]
     cdf = netCDF4.Dataset(approx_files[i])
     vals = read_var(cdf,"sea_surface_temperature")
    
@@ -203,14 +203,16 @@ for i in range(total_files):
     clear_reinstated.append(np.isfinite(col).sum())
     cdf.close() 
 
-outfile = 'std_' + time_file
+"""
+outfile = '../data/' +time_file + "/stds"
 sio.savemat(outfile, {"sst":sst_std, "pass2":pass2_std, "collated1":collated, "collated2":collated2, "scollated":scollated,"reinstated":reinstated_std, "approx1":approx_std, "approx2":approx2_std, "time_stamps":time_stamps})
 
-outfile = 'means_' + time_file
+outfile = '../data/' +time_file + "/means"
 sio.savemat(outfile,{ 'sst':sst_mean,'pass2':pass2_mean,'collated1':collated_mean,'collated2':collated2_mean,'scollated':scollated_mean,'reinstated':reinstated_mean,'approx1':approx_mean,'approx2':approx2_mean,'time_stamps':time_stamps})
 
-outfile = 'num_obs_' + time_file
+outfile = '../data/' +time_file + "/num_obs"
 sio.savemat(outfile,{ "sst":acspo,"pass2":clear_pass2,"collated1":clear_col,"collated2":clear_col2,"scollated":clear_scol,"reinstated":clear_reinstated,"approx1":clear_approx,"approx2":clear_approx2, "time_stamps":time_stamps})
+"""
 
 plt.figure()
 plt.grid()
@@ -226,7 +228,7 @@ plt.plot(approx_std, label="approx")
 plt.plot(approx2_std, label="approx2")
 plt.legend()
 plt.xticks(hour_ind,times,rotation='vertical')
-plt.title("Standard Deviation Interpolated Collated")
+plt.title("Standard Deviation " + time_file)
 plt.show()
 
 
@@ -243,7 +245,7 @@ plt.plot(approx_mean, label="approx")
 plt.plot(approx2_mean, label="approx2")
 plt.legend()
 plt.xticks(hour_ind,times,rotation='vertical')
-plt.title("Standard Deviation Interpolated Collated")
+plt.title("Means " + time_file)
 plt.show()
 
 
@@ -269,11 +271,11 @@ plt.plot(clear_reinstated, label="reinstated")
 plt.plot(clear_approx, label="approx")
 plt.plot(clear_approx2, label="approx2")
 plt.legend()
-plt.title("Number Clear Interpolated Collated")
+plt.title("Number Clear " + time_file)
 plt.xticks(hour_ind,times,rotation='vertical')
 plt.show()
 
-outfile = 'num_obs_' + time_file
+outfile = '../data/' +time_file + "/num_obs"
 sio.savemat(outfile,{ "sst":acspo,"pass2":clear_pass2,"collated1":clear_col,"collated2":clear_col2,"scollated":clear_scol,"reinstated":clear_reinstated,"approx1":clear_approx,"approx2":clear_approx2, "time_stamps":time_stamps})
 
 
